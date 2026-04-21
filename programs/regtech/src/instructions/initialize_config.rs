@@ -37,6 +37,7 @@ pub(crate) fn handle_initialize_config(
 
     let config = &mut ctx.accounts.config;
     config.admin = ctx.accounts.admin.key();
+    config.pending_admin = None;
     config.paused = false;
     config.default_pass_threshold_bps = default_pass_threshold_bps;
     config.default_cooldown_seconds = default_cooldown_seconds;

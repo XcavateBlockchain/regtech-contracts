@@ -1,3 +1,5 @@
+#![allow(clippy::diverging_sub_expression)]
+
 pub mod constants;
 pub mod error;
 pub mod instructions;
@@ -5,9 +7,15 @@ pub mod state;
 
 use anchor_lang::prelude::*;
 
+pub use instructions::accept_admin_update::*;
 pub use instructions::initialize_config::*;
+pub use instructions::propose_admin_update::*;
 pub use instructions::register_module::*;
 pub use instructions::register_partner::*;
+pub use instructions::rotate_attestor::*;
+pub use instructions::set_module_active::*;
+pub use instructions::set_partner_active::*;
+pub use instructions::set_paused::*;
 pub use instructions::start_attempt::*;
 pub use instructions::submit_attempt::*;
 
@@ -75,5 +83,40 @@ pub mod regtech {
 
     pub fn submit_attempt(ctx: Context<SubmitAttempt>, score_bps: u16) -> Result<()> {
         instructions::submit_attempt::handle_submit_attempt(ctx, score_bps)
+    }
+
+    pub fn set_paused(ctx: Context<SetPaused>, paused: bool, reason_code: u8) -> Result<()> {
+        instructions::set_paused::handle_set_paused(ctx, paused, reason_code)
+    }
+
+    pub fn set_partner_active(
+        ctx: Context<SetPartnerActive>,
+        active: bool,
+        reason_code: u8,
+    ) -> Result<()> {
+        instructions::set_partner_active::handle_set_partner_active(ctx, active, reason_code)
+    }
+
+    pub fn set_module_active(
+        ctx: Context<SetModuleActive>,
+        active: bool,
+        reason_code: u8,
+    ) -> Result<()> {
+        instructions::set_module_active::handle_set_module_active(ctx, active, reason_code)
+    }
+
+    pub fn propose_admin_update(
+        ctx: Context<ProposeAdminUpdate>,
+        candidate: Pubkey,
+    ) -> Result<()> {
+        instructions::propose_admin_update::handle_propose_admin_update(ctx, candidate)
+    }
+
+    pub fn accept_admin_update(ctx: Context<AcceptAdminUpdate>) -> Result<()> {
+        instructions::accept_admin_update::handle_accept_admin_update(ctx)
+    }
+
+    pub fn rotate_attestor(ctx: Context<RotateAttestor>, new_attestor: Pubkey) -> Result<()> {
+        instructions::rotate_attestor::handle_rotate_attestor(ctx, new_attestor)
     }
 }

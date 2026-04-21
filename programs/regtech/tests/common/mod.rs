@@ -26,7 +26,7 @@ pub const PROGRAM_BYTES: &[u8] = include_bytes!("../../../../target/deploy/regte
 
 pub fn setup() -> (LiteSVM, Keypair) {
     let mut svm = LiteSVM::new();
-    svm.add_program(regtech::ID, PROGRAM_BYTES);
+    let _ = svm.add_program(regtech::ID, PROGRAM_BYTES);
     // LiteSVM starts with unix_timestamp at 0, which makes the program's
     // `attempt.last_attempt_at > 0` cooldown guard think nothing has been
     // submitted yet even when something has. Set a realistic epoch time so
@@ -47,6 +47,16 @@ pub fn warp_unix_seconds(svm: &mut LiteSVM, delta_seconds: i64) {
     let mut clock = svm.get_sysvar::<solana_clock::Clock>();
     clock.unix_timestamp = clock.unix_timestamp.saturating_add(delta_seconds);
     svm.set_sysvar(&clock);
+}
+
+/// Force a fresh blockhash by advancing the slot. Use this between otherwise-
+/// identical transactions in a test to avoid LiteSVM's AlreadyProcessed guard.
+pub fn advance_blockhash(svm: &mut LiteSVM) {
+    let mut clock = svm.get_sysvar::<solana_clock::Clock>();
+    clock.slot = clock.slot.saturating_add(1);
+    clock.unix_timestamp = clock.unix_timestamp.saturating_add(1);
+    svm.set_sysvar(&clock);
+    svm.expire_blockhash();
 }
 
 // ----- Error assertions -----
@@ -260,6 +270,95 @@ pub fn ix_start_attempt(
         }
         .to_account_metas(None),
         data: regtech::instruction::StartAttempt {}.data(),
+    }
+}
+
+pub fn ix_set_paused(admin: Pubkey, paused: bool, reason_code: u8) -> Instruction {
+    Instruction {
+        program_id: regtech::ID,
+        accounts: regtech::accounts::SetPaused {
+            admin,
+            config: config_pda(),
+        }
+        .to_account_metas(None),
+        data: regtech::instruction::SetPaused { paused, reason_code }.data(),
+    }
+}
+
+pub fn ix_set_partner_active(
+    admin: Pubkey,
+    partner_id: [u8; 16],
+    active: bool,
+    reason_code: u8,
+) -> Instruction {
+    Instruction {
+        program_id: regtech::ID,
+        accounts: regtech::accounts::SetPartnerActive {
+            admin,
+            config: config_pda(),
+            partner: partner_pda(&partner_id),
+        }
+        .to_account_metas(None),
+        data: regtech::instruction::SetPartnerActive { active, reason_code }.data(),
+    }
+}
+
+pub fn ix_set_module_active(
+    partner_admin: Pubkey,
+    partner_id: [u8; 16],
+    module_id_hash: [u8; 32],
+    active: bool,
+    reason_code: u8,
+) -> Instruction {
+    Instruction {
+        program_id: regtech::ID,
+        accounts: regtech::accounts::SetModuleActive {
+            partner_admin,
+            partner: partner_pda(&partner_id),
+            module: module_pda(&partner_id, &module_id_hash),
+        }
+        .to_account_metas(None),
+        data: regtech::instruction::SetModuleActive { active, reason_code }.data(),
+    }
+}
+
+pub fn ix_propose_admin_update(current_admin: Pubkey, candidate: Pubkey) -> Instruction {
+    Instruction {
+        program_id: regtech::ID,
+        accounts: regtech::accounts::ProposeAdminUpdate {
+            admin: current_admin,
+            config: config_pda(),
+        }
+        .to_account_metas(None),
+        data: regtech::instruction::ProposeAdminUpdate { candidate }.data(),
+    }
+}
+
+pub fn ix_accept_admin_update(new_admin: Pubkey) -> Instruction {
+    Instruction {
+        program_id: regtech::ID,
+        accounts: regtech::accounts::AcceptAdminUpdate {
+            new_admin,
+            config: config_pda(),
+        }
+        .to_account_metas(None),
+        data: regtech::instruction::AcceptAdminUpdate {}.data(),
+    }
+}
+
+pub fn ix_rotate_attestor(
+    partner_admin: Pubkey,
+    partner_id: [u8; 16],
+    new_attestor: Pubkey,
+) -> Instruction {
+    Instruction {
+        program_id: regtech::ID,
+        accounts: regtech::accounts::RotateAttestor {
+            partner_admin,
+            partner: partner_pda(&partner_id),
+        }
+        .to_account_metas(None),
+        data: regtech::instruction::RotateAttestor { new_attestor }.data(),
     }
 }
 

@@ -34,4 +34,10 @@ pub enum RegtechError {
     AlreadyPassed,
     #[msg("Arithmetic overflow")]
     ArithmeticOverflow,
+    #[msg("Pubkey cannot be the default (zero) pubkey")]
+    InvalidPubkey,
+    #[msg("No admin rotation is pending")]
+    NoPendingAdmin,
+    #[msg("Signer does not match the pending admin proposal")]
+    PendingAdminMismatch,
 }

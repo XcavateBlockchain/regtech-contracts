@@ -4,6 +4,7 @@ use anchor_lang::prelude::*;
 #[derive(InitSpace)]
 pub struct Config {
     pub admin: Pubkey,
+    pub pending_admin: Option<Pubkey>,
     pub paused: bool,
     pub default_pass_threshold_bps: u16,
     pub default_cooldown_seconds: i64,
