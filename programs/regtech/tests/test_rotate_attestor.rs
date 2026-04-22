@@ -49,8 +49,7 @@ fn old_attestor_cannot_submit_after_rotation() {
         &[&partner_admin],
     );
 
-    let user = Keypair::new();
-    fund(&mut svm, &user.pubkey(), 1_000_000_000);
+    let user = enrolled_user(&mut svm, &partner_admin, partner_id, module_id_hash);
     send_ok(
         &mut svm,
         ix_start_attempt(user.pubkey(), partner_id, module_id_hash),
@@ -91,8 +90,7 @@ fn new_attestor_can_submit_after_rotation() {
         &[&partner_admin],
     );
 
-    let user = Keypair::new();
-    fund(&mut svm, &user.pubkey(), 1_000_000_000);
+    let user = enrolled_user(&mut svm, &partner_admin, partner_id, module_id_hash);
     send_ok(
         &mut svm,
         ix_start_attempt(user.pubkey(), partner_id, module_id_hash),

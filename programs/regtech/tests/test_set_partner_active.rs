@@ -1,6 +1,6 @@
 mod common;
 
-use {common::*, regtech::error::RegtechError, solana_keypair::Keypair};
+use {common::*, regtech::error::RegtechError};
 
 #[test]
 fn admin_can_deactivate_and_reactivate() {
@@ -85,19 +85,21 @@ fn deactivation_blocks_start_attempt() {
     let ModuleFixture {
         mut svm,
         admin,
+        partner_admin,
         partner_id,
         module_id_hash,
         ..
     } = register_module_fixture();
+
+    // Enroll while still active, then deactivate. Otherwise deactivation
+    // prevents enrollment, and we want to test the start_attempt gate here.
+    let user = enrolled_user(&mut svm, &partner_admin, partner_id, module_id_hash);
 
     send_ok(
         &mut svm,
         ix_set_partner_active(admin.pubkey(), partner_id, false, 0),
         &[&admin],
     );
-
-    let user = Keypair::new();
-    fund(&mut svm, &user.pubkey(), 1_000_000_000);
 
     let res = send(
         &mut svm,
@@ -113,14 +115,14 @@ fn deactivation_blocks_submit_attempt() {
         mut svm,
         admin,
         attestor,
+        partner_admin,
         partner_id,
         module_id_hash,
         ..
     } = register_module_fixture();
 
-    // Start the attempt while the partner is still active.
-    let user = Keypair::new();
-    fund(&mut svm, &user.pubkey(), 1_000_000_000);
+    // Enroll and start the attempt while the partner is still active.
+    let user = enrolled_user(&mut svm, &partner_admin, partner_id, module_id_hash);
     send_ok(
         &mut svm,
         ix_start_attempt(user.pubkey(), partner_id, module_id_hash),
@@ -148,6 +150,7 @@ fn reactivation_restores_normal_operation() {
     let ModuleFixture {
         mut svm,
         admin,
+        partner_admin,
         partner_id,
         module_id_hash,
         ..
@@ -164,8 +167,7 @@ fn reactivation_restores_normal_operation() {
         &[&admin],
     );
 
-    let user = Keypair::new();
-    fund(&mut svm, &user.pubkey(), 1_000_000_000);
+    let user = enrolled_user(&mut svm, &partner_admin, partner_id, module_id_hash);
     send_ok(
         &mut svm,
         ix_start_attempt(user.pubkey(), partner_id, module_id_hash),

@@ -6,13 +6,13 @@ fn start_scenario() -> (litesvm::LiteSVM, Keypair, Keypair, [u8; 16], [u8; 32]) 
     let ModuleFixture {
         mut svm,
         attestor,
+        partner_admin,
         partner_id,
         module_id_hash,
         ..
     } = register_module_fixture();
 
-    let user = Keypair::new();
-    fund(&mut svm, &user.pubkey(), 1_000_000_000);
+    let user = enrolled_user(&mut svm, &partner_admin, partner_id, module_id_hash);
 
     send_ok(
         &mut svm,
@@ -81,9 +81,6 @@ fn chain_computes_pass_flag_not_attestor_assertion() {
         ..
     } = register_module_fixture();
 
-    let user = Keypair::new();
-    fund(&mut svm, &user.pubkey(), 1_000_000_000);
-
     // Register a stricter module with a 9500 threshold.
     let strict_code = "strict".to_string();
     let strict_hash = code_hash(&strict_code);
@@ -101,6 +98,8 @@ fn chain_computes_pass_flag_not_attestor_assertion() {
         ),
         &[&partner_admin],
     );
+
+    let user = enrolled_user(&mut svm, &partner_admin, partner_id, strict_hash);
 
     send_ok(
         &mut svm,
@@ -273,18 +272,21 @@ fn rejects_when_module_inactive() {
 
 #[test]
 fn submit_attempt_with_uninitialized_pda_fails() {
-    // User never called start_attempt, so the Attempt PDA has no data. Anchor's
-    // Account<'info, Attempt> loader returns AccountNotInitialized (code 3012).
-    // Not a RegtechError, so we pin the raw code instead.
+    // User was enrolled but never called start_attempt, so the Attempt PDA
+    // has no data. Anchor's Account<'info, Attempt> loader returns
+    // AccountNotInitialized (code 3012). Not a RegtechError, so we pin the
+    // raw code instead.
     let ModuleFixture {
         mut svm,
         attestor,
+        partner_admin,
         partner_id,
         module_id_hash,
         ..
     } = register_module_fixture();
 
-    let user = Keypair::new();
+    // Enroll so the enrollment gate isn't what rejects. Still skip start.
+    let user = enrolled_user(&mut svm, &partner_admin, partner_id, module_id_hash);
 
     let res = send(
         &mut svm,

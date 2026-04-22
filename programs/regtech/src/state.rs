@@ -57,3 +57,15 @@ pub struct Attempt {
     pub passed_at: Option<i64>,
     pub bump: u8,
 }
+
+#[account]
+#[derive(InitSpace)]
+pub struct Enrollment {
+    pub user: Pubkey,
+    pub partner_id: [u8; 16],
+    pub module_id_hash: [u8; 32],
+    pub enrolled_at: i64,
+    pub enrolled_by: Pubkey,
+    pub reason_code: u8,
+    pub bump: u8,
+}

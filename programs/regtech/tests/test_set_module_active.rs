@@ -37,8 +37,8 @@ fn non_partner_admin_caller_rejected() {
         ..
     } = register_module_fixture();
 
-    // The super-admin can't flip a module's active state either. Only the
-    // partner_admin registered on the Partner has that authority.
+    // Super-admin doesn't get to flip a module's active flag. That's
+    // the partner_admin's call, and only for their own partner.
     let res = send(
         &mut svm,
         ix_set_module_active(admin.pubkey(), partner_id, module_id_hash, false, 0),
@@ -77,14 +77,14 @@ fn deactivation_blocks_start_attempt() {
         ..
     } = register_module_fixture();
 
+    // Enroll while still active, then deactivate the module.
+    let user = enrolled_user(&mut svm, &partner_admin, partner_id, module_id_hash);
+
     send_ok(
         &mut svm,
         ix_set_module_active(partner_admin.pubkey(), partner_id, module_id_hash, false, 0),
         &[&partner_admin],
     );
-
-    let user = Keypair::new();
-    fund(&mut svm, &user.pubkey(), 1_000_000_000);
 
     let res = send(
         &mut svm,
@@ -105,9 +105,8 @@ fn deactivation_blocks_submit_attempt() {
         ..
     } = register_module_fixture();
 
-    // Start an attempt while the module is still active.
-    let user = Keypair::new();
-    fund(&mut svm, &user.pubkey(), 1_000_000_000);
+    // Enroll and start an attempt while the module is still active.
+    let user = enrolled_user(&mut svm, &partner_admin, partner_id, module_id_hash);
     send_ok(
         &mut svm,
         ix_start_attempt(user.pubkey(), partner_id, module_id_hash),
@@ -132,9 +131,9 @@ fn deactivation_blocks_submit_attempt() {
 
 #[test]
 fn one_module_deactivation_doesnt_affect_others() {
-    // Prove module deactivation is scoped to the specific module.
-    // Register a second module and check it still works after the first one
-    // is deactivated.
+    // Deactivating one module shouldn't take the whole partner down.
+    // Register a second module and make sure it still works after the
+    // first gets pulled.
     let ModuleFixture {
         mut svm,
         partner_admin,
@@ -166,9 +165,8 @@ fn one_module_deactivation_doesnt_affect_others() {
         &[&partner_admin],
     );
 
-    // Module B is untouched.
-    let user = Keypair::new();
-    fund(&mut svm, &user.pubkey(), 1_000_000_000);
+    // Module B should still work normally.
+    let user = enrolled_user(&mut svm, &partner_admin, partner_id, module_b_hash);
     send_ok(
         &mut svm,
         ix_start_attempt(user.pubkey(), partner_id, module_b_hash),

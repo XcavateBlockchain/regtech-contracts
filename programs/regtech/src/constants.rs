@@ -12,6 +12,9 @@ pub const MODULE_SEED: &[u8] = b"module";
 #[constant]
 pub const ATTEMPT_SEED: &[u8] = b"attempt";
 
+#[constant]
+pub const ENROLLMENT_SEED: &[u8] = b"enrollment";
+
 pub const BPS_DENOMINATOR: u16 = 10_000;
 
 pub const MAX_NAME_LEN: usize = 64;

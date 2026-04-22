@@ -1,8 +1,8 @@
 use anchor_lang::prelude::*;
 
-use crate::constants::{ATTEMPT_SEED, CONFIG_SEED, MODULE_SEED, PARTNER_SEED};
+use crate::constants::{ATTEMPT_SEED, CONFIG_SEED, ENROLLMENT_SEED, MODULE_SEED, PARTNER_SEED};
 use crate::error::RegtechError;
-use crate::state::{Attempt, Config, Module, Partner};
+use crate::state::{Attempt, Config, Enrollment, Module, Partner};
 
 #[derive(Accounts)]
 pub struct StartAttempt<'info> {
@@ -30,6 +30,25 @@ pub struct StartAttempt<'info> {
         constraint = module.partner_id == partner.partner_id @ RegtechError::NotAuthorized,
     )]
     pub module: Account<'info, Module>,
+
+    // The enrollment gate. Anchor's typed Account<'info, Enrollment> loader
+    // fails with AccountNotInitialized if this PDA doesn't exist (either the
+    // partner never enrolled the user, or they revoked the enrollment and it
+    // was closed). This is the maker-checker separation: partner_admin's
+    // enrollment decision gates user participation, distinct from the
+    // attestor's scoring decision in submit_attempt.
+    #[account(
+        seeds = [
+            ENROLLMENT_SEED,
+            user.key().as_ref(),
+            &partner.partner_id,
+            &module.module_id_hash,
+        ],
+        bump = enrollment.bump,
+        constraint = enrollment.user == user.key() @ RegtechError::NotAuthorized,
+        constraint = enrollment.partner_id == partner.partner_id @ RegtechError::NotAuthorized,
+    )]
+    pub enrollment: Account<'info, Enrollment>,
 
     #[account(
         init,

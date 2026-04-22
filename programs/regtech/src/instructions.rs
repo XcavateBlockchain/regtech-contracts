@@ -1,8 +1,10 @@
 pub mod accept_admin_update;
+pub mod enroll_user;
 pub mod initialize_config;
 pub mod propose_admin_update;
 pub mod register_module;
 pub mod register_partner;
+pub mod revoke_enrollment;
 pub mod rotate_attestor;
 pub mod set_module_active;
 pub mod set_partner_active;
@@ -11,10 +13,12 @@ pub mod start_attempt;
 pub mod submit_attempt;
 
 pub use accept_admin_update::*;
+pub use enroll_user::*;
 pub use initialize_config::*;
 pub use propose_admin_update::*;
 pub use register_module::*;
 pub use register_partner::*;
+pub use revoke_enrollment::*;
 pub use rotate_attestor::*;
 pub use set_module_active::*;
 pub use set_partner_active::*;

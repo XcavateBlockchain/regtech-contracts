@@ -6,13 +6,13 @@ use {common::*, regtech::error::RegtechError, solana_keypair::Keypair};
 fn happy_path_writes_fresh_attempt() {
     let ModuleFixture {
         mut svm,
+        partner_admin,
         partner_id,
         module_id_hash,
         ..
     } = register_module_fixture();
 
-    let user = Keypair::new();
-    fund(&mut svm, &user.pubkey(), 1_000_000_000);
+    let user = enrolled_user(&mut svm, &partner_admin, partner_id, module_id_hash);
 
     send_ok(
         &mut svm,
@@ -35,15 +35,14 @@ fn happy_path_writes_fresh_attempt() {
 fn two_users_can_start_on_same_module_independently() {
     let ModuleFixture {
         mut svm,
+        partner_admin,
         partner_id,
         module_id_hash,
         ..
     } = register_module_fixture();
 
-    let user_a = Keypair::new();
-    let user_b = Keypair::new();
-    fund(&mut svm, &user_a.pubkey(), 1_000_000_000);
-    fund(&mut svm, &user_b.pubkey(), 1_000_000_000);
+    let user_a = enrolled_user(&mut svm, &partner_admin, partner_id, module_id_hash);
+    let user_b = enrolled_user(&mut svm, &partner_admin, partner_id, module_id_hash);
 
     send_ok(
         &mut svm,
@@ -66,13 +65,13 @@ fn two_users_can_start_on_same_module_independently() {
 fn duplicate_start_by_same_user_rejected() {
     let ModuleFixture {
         mut svm,
+        partner_admin,
         partner_id,
         module_id_hash,
         ..
     } = register_module_fixture();
 
-    let user = Keypair::new();
-    fund(&mut svm, &user.pubkey(), 1_000_000_000);
+    let user = enrolled_user(&mut svm, &partner_admin, partner_id, module_id_hash);
 
     send_ok(
         &mut svm,
@@ -85,13 +84,68 @@ fn duplicate_start_by_same_user_rejected() {
         ix_start_attempt(user.pubkey(), partner_id, module_id_hash),
         &[&user],
     );
-    // Duplicate init hits "account already in use" from the system program,
-    // not one of our error codes.
+    // Second init on the same PDA bounces off the system program with
+    // "account already in use". Not one of our error codes.
     assert!(res.is_err(), "second start_attempt for same (user, module) should fail init");
 }
 
 #[test]
+fn start_attempt_without_enrollment_rejected() {
+    let ModuleFixture {
+        mut svm,
+        partner_id,
+        module_id_hash,
+        ..
+    } = register_module_fixture();
+
+    let user = Keypair::new();
+    fund(&mut svm, &user.pubkey(), 1_000_000_000);
+
+    let res = send(
+        &mut svm,
+        ix_start_attempt(user.pubkey(), partner_id, module_id_hash),
+        &[&user],
+    );
+    expect_error_code(res, 3012);
+}
+
+#[test]
+fn start_attempt_after_revoked_enrollment_rejected() {
+    let ModuleFixture {
+        mut svm,
+        partner_admin,
+        partner_id,
+        module_id_hash,
+        ..
+    } = register_module_fixture();
+
+    let user = enrolled_user(&mut svm, &partner_admin, partner_id, module_id_hash);
+
+    send_ok(
+        &mut svm,
+        ix_revoke_enrollment(
+            partner_admin.pubkey(),
+            user.pubkey(),
+            partner_id,
+            module_id_hash,
+            0,
+        ),
+        &[&partner_admin],
+    );
+
+    let res = send(
+        &mut svm,
+        ix_start_attempt(user.pubkey(), partner_id, module_id_hash),
+        &[&user],
+    );
+    expect_error_code(res, 3012);
+}
+
+#[test]
 fn start_attempt_with_unknown_module_rejected() {
+    // No module registered at this hash. Anchor walks accounts in the
+    // order they're declared, and `module` sits before `enrollment`, so
+    // the module loader is the one that trips with AccountNotInitialized.
     let PartnerFixture {
         mut svm,
         partner_id,
@@ -101,7 +155,6 @@ fn start_attempt_with_unknown_module_rejected() {
     let user = Keypair::new();
     fund(&mut svm, &user.pubkey(), 1_000_000_000);
 
-    // We never registered this module, so nothing lives at its PDA.
     let fake_hash = code_hash("never-registered");
 
     let res = send(
@@ -109,21 +162,25 @@ fn start_attempt_with_unknown_module_rejected() {
         ix_start_attempt(user.pubkey(), partner_id, fake_hash),
         &[&user],
     );
-    expect_error_code(res, 3012); // Anchor AccountNotInitialized
+    expect_error_code(res, 3012);
 }
 
 #[test]
 fn rejects_when_paused() {
     let ModuleFixture {
         mut svm,
+        partner_admin,
         partner_id,
         module_id_hash,
         ..
     } = register_module_fixture();
-    set_config_paused(&mut svm, true);
 
-    let user = Keypair::new();
-    fund(&mut svm, &user.pubkey(), 1_000_000_000);
+    // Enroll before pausing. Enrollment is an admin op and runs even
+    // while paused, but here we want to isolate the pause check on
+    // start_attempt.
+    let user = enrolled_user(&mut svm, &partner_admin, partner_id, module_id_hash);
+
+    set_config_paused(&mut svm, true);
 
     let res = send(
         &mut svm,
@@ -137,14 +194,15 @@ fn rejects_when_paused() {
 fn rejects_when_partner_inactive() {
     let ModuleFixture {
         mut svm,
+        partner_admin,
         partner_id,
         module_id_hash,
         ..
     } = register_module_fixture();
-    set_partner_active(&mut svm, &partner_id, false);
 
-    let user = Keypair::new();
-    fund(&mut svm, &user.pubkey(), 1_000_000_000);
+    let user = enrolled_user(&mut svm, &partner_admin, partner_id, module_id_hash);
+
+    set_partner_active(&mut svm, &partner_id, false);
 
     let res = send(
         &mut svm,
@@ -158,14 +216,15 @@ fn rejects_when_partner_inactive() {
 fn rejects_when_module_inactive() {
     let ModuleFixture {
         mut svm,
+        partner_admin,
         partner_id,
         module_id_hash,
         ..
     } = register_module_fixture();
-    set_module_active(&mut svm, &partner_id, &module_id_hash, false);
 
-    let user = Keypair::new();
-    fund(&mut svm, &user.pubkey(), 1_000_000_000);
+    let user = enrolled_user(&mut svm, &partner_admin, partner_id, module_id_hash);
+
+    set_module_active(&mut svm, &partner_id, &module_id_hash, false);
 
     let res = send(
         &mut svm,
@@ -179,20 +238,34 @@ fn rejects_when_module_inactive() {
 fn user_with_insufficient_lamports_cannot_start() {
     let ModuleFixture {
         mut svm,
+        partner_admin,
         partner_id,
         module_id_hash,
         ..
     } = register_module_fixture();
 
+    // Enroll the user but skip funding them. Partner_admin paid for
+    // the Enrollment rent, but the Attempt PDA rent comes out of the
+    // user's own account.
     let user = Keypair::new();
-    // No airdrop for this user, so they can't pay rent on the Attempt PDA.
+    send_ok(
+        &mut svm,
+        ix_enroll_user(
+            partner_admin.pubkey(),
+            user.pubkey(),
+            partner_id,
+            module_id_hash,
+            0,
+        ),
+        &[&partner_admin],
+    );
 
     let res = send(
         &mut svm,
         ix_start_attempt(user.pubkey(), partner_id, module_id_hash),
         &[&user],
     );
-    // System program rejects create_account when the user has no lamports.
-    // Not a RegtechError, just a plain InstructionError.
+    // With zero lamports the system program won't create_account, so
+    // this fails with a plain InstructionError rather than one of ours.
     assert!(res.is_err(), "user with 0 SOL cannot fund the Attempt PDA");
 }

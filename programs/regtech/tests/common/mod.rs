@@ -13,7 +13,7 @@ use {
     },
     regtech::{
         constants::{MPL_CORE_KEY_COLLECTION_V1, MPL_CORE_PROGRAM_ID},
-        state::{Attempt, Config, Module, Partner},
+        state::{Attempt, Config, Enrollment, Module, Partner},
     },
     solana_account::Account,
     solana_keypair::Keypair,
@@ -162,6 +162,18 @@ pub fn attempt_pda(
     .0
 }
 
+pub fn enrollment_pda(
+    user: &Pubkey,
+    partner_id: &[u8; 16],
+    module_id_hash: &[u8; 32],
+) -> Pubkey {
+    Pubkey::find_program_address(
+        &[b"enrollment", user.as_ref(), partner_id, module_id_hash],
+        &regtech::ID,
+    )
+    .0
+}
+
 pub fn code_hash(module_code: &str) -> [u8; 32] {
     hash(module_code.as_bytes()).to_bytes()
 }
@@ -265,11 +277,53 @@ pub fn ix_start_attempt(
             config: config_pda(),
             partner: partner_pda(&partner_id),
             module: module_pda(&partner_id, &module_id_hash),
+            enrollment: enrollment_pda(&user, &partner_id, &module_id_hash),
             attempt: attempt_pda(&user, &partner_id, &module_id_hash),
             system_program: system_program::ID,
         }
         .to_account_metas(None),
         data: regtech::instruction::StartAttempt {}.data(),
+    }
+}
+
+pub fn ix_enroll_user(
+    partner_admin: Pubkey,
+    user: Pubkey,
+    partner_id: [u8; 16],
+    module_id_hash: [u8; 32],
+    reason_code: u8,
+) -> Instruction {
+    Instruction {
+        program_id: regtech::ID,
+        accounts: regtech::accounts::EnrollUser {
+            partner_admin,
+            user,
+            partner: partner_pda(&partner_id),
+            module: module_pda(&partner_id, &module_id_hash),
+            enrollment: enrollment_pda(&user, &partner_id, &module_id_hash),
+            system_program: system_program::ID,
+        }
+        .to_account_metas(None),
+        data: regtech::instruction::EnrollUser { reason_code }.data(),
+    }
+}
+
+pub fn ix_revoke_enrollment(
+    partner_admin: Pubkey,
+    user: Pubkey,
+    partner_id: [u8; 16],
+    module_id_hash: [u8; 32],
+    reason_code: u8,
+) -> Instruction {
+    Instruction {
+        program_id: regtech::ID,
+        accounts: regtech::accounts::RevokeEnrollment {
+            partner_admin,
+            partner: partner_pda(&partner_id),
+            enrollment: enrollment_pda(&user, &partner_id, &module_id_hash),
+        }
+        .to_account_metas(None),
+        data: regtech::instruction::RevokeEnrollment { reason_code }.data(),
     }
 }
 
@@ -480,6 +534,44 @@ pub fn read_attempt(
         .get_account(&attempt_pda(user, partner_id, module_id_hash))
         .expect("attempt account exists");
     Attempt::try_deserialize(&mut &account.data[..]).expect("decode attempt")
+}
+
+pub fn read_enrollment(
+    svm: &LiteSVM,
+    user: &Pubkey,
+    partner_id: &[u8; 16],
+    module_id_hash: &[u8; 32],
+) -> Enrollment {
+    let account = svm
+        .get_account(&enrollment_pda(user, partner_id, module_id_hash))
+        .expect("enrollment account exists");
+    Enrollment::try_deserialize(&mut &account.data[..]).expect("decode enrollment")
+}
+
+/// Creates a fresh user keypair, funds it, and enrolls them in the given
+/// module via the real enroll_user instruction. Returns the funded keypair.
+/// Most start_attempt tests just want "a user who's allowed to take this
+/// module" without caring about the enrollment mechanics.
+pub fn enrolled_user(
+    svm: &mut LiteSVM,
+    partner_admin: &Keypair,
+    partner_id: [u8; 16],
+    module_id_hash: [u8; 32],
+) -> Keypair {
+    let user = Keypair::new();
+    fund(svm, &user.pubkey(), 1_000_000_000);
+    send_ok(
+        svm,
+        ix_enroll_user(
+            partner_admin.pubkey(),
+            user.pubkey(),
+            partner_id,
+            module_id_hash,
+            0,
+        ),
+        &[partner_admin],
+    );
+    user
 }
 
 // ----- Fixture builders (stack common setup) -----

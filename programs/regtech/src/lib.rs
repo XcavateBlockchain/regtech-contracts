@@ -8,10 +8,12 @@ pub mod state;
 use anchor_lang::prelude::*;
 
 pub use instructions::accept_admin_update::*;
+pub use instructions::enroll_user::*;
 pub use instructions::initialize_config::*;
 pub use instructions::propose_admin_update::*;
 pub use instructions::register_module::*;
 pub use instructions::register_partner::*;
+pub use instructions::revoke_enrollment::*;
 pub use instructions::rotate_attestor::*;
 pub use instructions::set_module_active::*;
 pub use instructions::set_partner_active::*;
@@ -118,5 +120,13 @@ pub mod regtech {
 
     pub fn rotate_attestor(ctx: Context<RotateAttestor>, new_attestor: Pubkey) -> Result<()> {
         instructions::rotate_attestor::handle_rotate_attestor(ctx, new_attestor)
+    }
+
+    pub fn enroll_user(ctx: Context<EnrollUser>, reason_code: u8) -> Result<()> {
+        instructions::enroll_user::handle_enroll_user(ctx, reason_code)
+    }
+
+    pub fn revoke_enrollment(ctx: Context<RevokeEnrollment>, reason_code: u8) -> Result<()> {
+        instructions::revoke_enrollment::handle_revoke_enrollment(ctx, reason_code)
     }
 }
