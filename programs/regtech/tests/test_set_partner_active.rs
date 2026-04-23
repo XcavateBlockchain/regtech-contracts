@@ -35,8 +35,8 @@ fn non_admin_caller_rejected() {
         ..
     } = register_partner_fixture();
 
-    // Even the partner's own admin can't deactivate the partner.
-    // Only the super-admin controls partner activation state.
+    // Even the partner's own admin can't deactivate the partner. That's
+    // the super-admin's call.
     let res = send(
         &mut svm,
         ix_set_partner_active(partner_admin.pubkey(), partner_id, false, 0),
@@ -86,6 +86,7 @@ fn deactivation_blocks_start_attempt() {
         mut svm,
         admin,
         partner_admin,
+        attestor,
         partner_id,
         module_id_hash,
         ..
@@ -103,8 +104,8 @@ fn deactivation_blocks_start_attempt() {
 
     let res = send(
         &mut svm,
-        ix_start_attempt(user.pubkey(), partner_id, module_id_hash),
-        &[&user],
+        ix_start_attempt(attestor.pubkey(), user.pubkey(), partner_id, module_id_hash),
+        &[&attestor],
     );
     expect_regtech_error(res, RegtechError::PartnerInactive);
 }
@@ -125,8 +126,8 @@ fn deactivation_blocks_submit_attempt() {
     let user = enrolled_user(&mut svm, &partner_admin, partner_id, module_id_hash);
     send_ok(
         &mut svm,
-        ix_start_attempt(user.pubkey(), partner_id, module_id_hash),
-        &[&user],
+        ix_start_attempt(attestor.pubkey(), user.pubkey(), partner_id, module_id_hash),
+        &[&attestor],
     );
 
     // Now the admin cuts the partner off.
@@ -151,6 +152,7 @@ fn reactivation_restores_normal_operation() {
         mut svm,
         admin,
         partner_admin,
+        attestor,
         partner_id,
         module_id_hash,
         ..
@@ -170,7 +172,7 @@ fn reactivation_restores_normal_operation() {
     let user = enrolled_user(&mut svm, &partner_admin, partner_id, module_id_hash);
     send_ok(
         &mut svm,
-        ix_start_attempt(user.pubkey(), partner_id, module_id_hash),
-        &[&user],
+        ix_start_attempt(attestor.pubkey(), user.pubkey(), partner_id, module_id_hash),
+        &[&attestor],
     );
 }

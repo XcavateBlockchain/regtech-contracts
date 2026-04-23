@@ -52,8 +52,8 @@ fn old_attestor_cannot_submit_after_rotation() {
     let user = enrolled_user(&mut svm, &partner_admin, partner_id, module_id_hash);
     send_ok(
         &mut svm,
-        ix_start_attempt(user.pubkey(), partner_id, module_id_hash),
-        &[&user],
+        ix_start_attempt(new_attestor.pubkey(), user.pubkey(), partner_id, module_id_hash),
+        &[&new_attestor],
     );
 
     // Old attestor's signature no longer matches the stored partner.attestor.
@@ -93,8 +93,8 @@ fn new_attestor_can_submit_after_rotation() {
     let user = enrolled_user(&mut svm, &partner_admin, partner_id, module_id_hash);
     send_ok(
         &mut svm,
-        ix_start_attempt(user.pubkey(), partner_id, module_id_hash),
-        &[&user],
+        ix_start_attempt(new_attestor.pubkey(), user.pubkey(), partner_id, module_id_hash),
+        &[&new_attestor],
     );
 
     send_ok(

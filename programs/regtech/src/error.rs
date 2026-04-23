@@ -40,4 +40,8 @@ pub enum RegtechError {
     NoPendingAdmin,
     #[msg("Signer does not match the pending admin proposal")]
     PendingAdminMismatch,
+    #[msg("Attempt has not passed")]
+    AttemptNotPassed,
+    #[msg("Partner vault has insufficient lamports")]
+    VaultInsufficient,
 }

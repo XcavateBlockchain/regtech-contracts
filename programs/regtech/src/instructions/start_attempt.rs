@@ -4,10 +4,26 @@ use crate::constants::{ATTEMPT_SEED, CONFIG_SEED, ENROLLMENT_SEED, MODULE_SEED, 
 use crate::error::RegtechError;
 use crate::state::{Attempt, Config, Enrollment, Module, Partner};
 
+// Attestor signs (same key that later scores the submission), Partner PDA
+// picks up the rent bill. The user is the subject, not a signer, which
+// matches how B2B works in practice: the partner's backend drives the
+// flow and the end user never touches a wallet.
+//
+// Rent flow is a two-step dance. Anchor's `init` pays the Attempt rent
+// out of the attestor's account, then the handler swaps lamports back:
+// vault down by rent, attestor up by rent, net zero for the attestor.
+// The attestor still needs a working SOL balance to cover that window,
+// but it stays roughly flat across calls.
 #[derive(Accounts)]
 pub struct StartAttempt<'info> {
     #[account(mut)]
-    pub user: Signer<'info>,
+    pub attestor: Signer<'info>,
+
+    /// CHECK: Subject of the attempt, used for PDA derivation and the
+    /// audit trail. Doesn't sign. Authorization comes from the attestor
+    /// (via has_one on Partner) and the Enrollment PDA that partner_admin
+    /// had to create earlier.
+    pub user: UncheckedAccount<'info>,
 
     #[account(
         seeds = [CONFIG_SEED],
@@ -17,8 +33,10 @@ pub struct StartAttempt<'info> {
     pub config: Account<'info, Config>,
 
     #[account(
+        mut,
         seeds = [PARTNER_SEED, &partner.partner_id],
         bump = partner.bump,
+        has_one = attestor @ RegtechError::NotAuthorized,
         constraint = partner.active @ RegtechError::PartnerInactive,
     )]
     pub partner: Account<'info, Partner>,
@@ -31,12 +49,9 @@ pub struct StartAttempt<'info> {
     )]
     pub module: Account<'info, Module>,
 
-    // The enrollment gate. Anchor's typed Account<'info, Enrollment> loader
-    // fails with AccountNotInitialized if this PDA doesn't exist (either the
-    // partner never enrolled the user, or they revoked the enrollment and it
-    // was closed). This is the maker-checker separation: partner_admin's
-    // enrollment decision gates user participation, distinct from the
-    // attestor's scoring decision in submit_attempt.
+    // Enrollment gate. The loader trips with AccountNotInitialized if the
+    // user was never enrolled or got revoked. Seeds use partner.partner_id
+    // so an attempt to start through the wrong partner doesn't resolve.
     #[account(
         seeds = [
             ENROLLMENT_SEED,
@@ -52,7 +67,7 @@ pub struct StartAttempt<'info> {
 
     #[account(
         init,
-        payer = user,
+        payer = attestor,
         space = 8 + Attempt::INIT_SPACE,
         seeds = [ATTEMPT_SEED, user.key().as_ref(), &partner.partner_id, &module.module_id_hash],
         bump,
@@ -67,6 +82,30 @@ pub(crate) fn handle_start_attempt(ctx: Context<StartAttempt>) -> Result<()> {
     let partner_id = ctx.accounts.partner.partner_id;
     let module_id_hash = ctx.accounts.module.module_id_hash;
     let user_key = ctx.accounts.user.key();
+
+    // Anchor's init just created the Attempt PDA out of the attestor's
+    // pocket. Refund the attestor from the vault so the partner ends up
+    // bearing the cost.
+    let rent = Rent::get()?;
+    let attempt_rent = rent.minimum_balance(8 + Attempt::INIT_SPACE);
+    let partner_own_rent = rent.minimum_balance(8 + Partner::INIT_SPACE);
+
+    let partner_info = ctx.accounts.partner.to_account_info();
+    let attestor_info = ctx.accounts.attestor.to_account_info();
+
+    let partner_balance = partner_info.lamports();
+    let vault_available = partner_balance
+        .checked_sub(partner_own_rent)
+        .ok_or(error!(RegtechError::ArithmeticOverflow))?;
+    require!(vault_available >= attempt_rent, RegtechError::VaultInsufficient);
+
+    **partner_info.try_borrow_mut_lamports()? = partner_balance
+        .checked_sub(attempt_rent)
+        .ok_or(error!(RegtechError::ArithmeticOverflow))?;
+    **attestor_info.try_borrow_mut_lamports()? = attestor_info
+        .lamports()
+        .checked_add(attempt_rent)
+        .ok_or(error!(RegtechError::ArithmeticOverflow))?;
 
     let attempt = &mut ctx.accounts.attempt;
     attempt.user = user_key;

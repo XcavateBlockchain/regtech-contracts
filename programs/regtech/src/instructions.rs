@@ -1,7 +1,10 @@
 pub mod accept_admin_update;
+pub mod claim_credential;
 pub mod enroll_user;
+pub mod fund_partner;
 pub mod initialize_config;
 pub mod propose_admin_update;
+pub mod refund_partner;
 pub mod register_module;
 pub mod register_partner;
 pub mod revoke_enrollment;
@@ -13,9 +16,12 @@ pub mod start_attempt;
 pub mod submit_attempt;
 
 pub use accept_admin_update::*;
+pub use claim_credential::*;
 pub use enroll_user::*;
+pub use fund_partner::*;
 pub use initialize_config::*;
 pub use propose_admin_update::*;
+pub use refund_partner::*;
 pub use register_module::*;
 pub use register_partner::*;
 pub use revoke_enrollment::*;

@@ -13,7 +13,7 @@ use {
     },
     regtech::{
         constants::{MPL_CORE_KEY_COLLECTION_V1, MPL_CORE_PROGRAM_ID},
-        state::{Attempt, Config, Enrollment, Module, Partner},
+        state::{Attempt, Config, Credential, Enrollment, Module, Partner},
     },
     solana_account::Account,
     solana_keypair::Keypair,
@@ -90,10 +90,10 @@ pub fn expect_regtech_error(
 
 // ----- State-mutation helpers for testing defensive constraints -----
 //
-// There's no set_paused or deactivate_partner instruction yet, but the
-// program's `!config.paused`, `partner.active`, and `module.active` checks
-// should still fire when those flags flip. We flip them directly via
-// LiteSVM so the defensive code gets exercised before the admin ixs land.
+// These predate the admin ixs and let tests flip `config.paused`,
+// `partner.active`, or `module.active` directly in LiteSVM. Still useful
+// when a test wants to isolate one constraint from the admin flow that
+// would normally set it.
 
 pub fn set_config_paused(svm: &mut LiteSVM, paused: bool) {
     let key = config_pda();
@@ -169,6 +169,18 @@ pub fn enrollment_pda(
 ) -> Pubkey {
     Pubkey::find_program_address(
         &[b"enrollment", user.as_ref(), partner_id, module_id_hash],
+        &regtech::ID,
+    )
+    .0
+}
+
+pub fn credential_pda(
+    user: &Pubkey,
+    partner_id: &[u8; 16],
+    module_id_hash: &[u8; 32],
+) -> Pubkey {
+    Pubkey::find_program_address(
+        &[b"credential", user.as_ref(), partner_id, module_id_hash],
         &regtech::ID,
     )
     .0
@@ -266,6 +278,7 @@ pub fn ix_register_module(
 }
 
 pub fn ix_start_attempt(
+    attestor: Pubkey,
     user: Pubkey,
     partner_id: [u8; 16],
     module_id_hash: [u8; 32],
@@ -273,6 +286,7 @@ pub fn ix_start_attempt(
     Instruction {
         program_id: regtech::ID,
         accounts: regtech::accounts::StartAttempt {
+            attestor,
             user,
             config: config_pda(),
             partner: partner_pda(&partner_id),
@@ -416,6 +430,56 @@ pub fn ix_rotate_attestor(
     }
 }
 
+pub fn ix_claim_credential(
+    partner_admin: Pubkey,
+    user: Pubkey,
+    partner_id: [u8; 16],
+    module_id_hash: [u8; 32],
+) -> Instruction {
+    Instruction {
+        program_id: regtech::ID,
+        accounts: regtech::accounts::ClaimCredential {
+            partner_admin,
+            config: config_pda(),
+            partner: partner_pda(&partner_id),
+            module: module_pda(&partner_id, &module_id_hash),
+            enrollment: enrollment_pda(&user, &partner_id, &module_id_hash),
+            attempt: attempt_pda(&user, &partner_id, &module_id_hash),
+            credential: credential_pda(&user, &partner_id, &module_id_hash),
+            system_program: system_program::ID,
+        }
+        .to_account_metas(None),
+        data: regtech::instruction::ClaimCredential {}.data(),
+    }
+}
+
+pub fn ix_fund_partner(admin: Pubkey, partner_id: [u8; 16], amount: u64) -> Instruction {
+    Instruction {
+        program_id: regtech::ID,
+        accounts: regtech::accounts::FundPartner {
+            admin,
+            config: config_pda(),
+            partner: partner_pda(&partner_id),
+            system_program: system_program::ID,
+        }
+        .to_account_metas(None),
+        data: regtech::instruction::FundPartner { amount }.data(),
+    }
+}
+
+pub fn ix_refund_partner(admin: Pubkey, partner_id: [u8; 16], amount: u64) -> Instruction {
+    Instruction {
+        program_id: regtech::ID,
+        accounts: regtech::accounts::RefundPartner {
+            admin,
+            config: config_pda(),
+            partner: partner_pda(&partner_id),
+        }
+        .to_account_metas(None),
+        data: regtech::instruction::RefundPartner { amount }.data(),
+    }
+}
+
 pub fn ix_submit_attempt(
     attestor: Pubkey,
     user: Pubkey,
@@ -548,10 +612,23 @@ pub fn read_enrollment(
     Enrollment::try_deserialize(&mut &account.data[..]).expect("decode enrollment")
 }
 
-/// Creates a fresh user keypair, funds it, and enrolls them in the given
-/// module via the real enroll_user instruction. Returns the funded keypair.
-/// Most start_attempt tests just want "a user who's allowed to take this
-/// module" without caring about the enrollment mechanics.
+pub fn read_credential(
+    svm: &LiteSVM,
+    user: &Pubkey,
+    partner_id: &[u8; 16],
+    module_id_hash: &[u8; 32],
+) -> Credential {
+    let account = svm
+        .get_account(&credential_pda(user, partner_id, module_id_hash))
+        .expect("credential account exists");
+    Credential::try_deserialize(&mut &account.data[..]).expect("decode credential")
+}
+
+/// Mints a fresh user keypair, funds it, and enrolls them in the given
+/// module through the real enroll_user ix. Returns the keypair. The user
+/// no longer needs SOL for start_attempt (attestor-signed, vault-paid),
+/// but we still fund them so tests that use the user as their own tx
+/// payer for unrelated things keep working.
 pub fn enrolled_user(
     svm: &mut LiteSVM,
     partner_admin: &Keypair,
@@ -570,6 +647,38 @@ pub fn enrolled_user(
             0,
         ),
         &[partner_admin],
+    );
+    user
+}
+
+/// Enrolls a user, starts an attempt, and submits a passing score.
+/// Shortcut for claim_credential tests that want a user already in the
+/// "passed, ready to claim" state without re-doing the whole chain each
+/// time.
+pub fn passed_user(
+    svm: &mut LiteSVM,
+    partner_admin: &Keypair,
+    attestor: &Keypair,
+    partner_id: [u8; 16],
+    module_id_hash: [u8; 32],
+    score_bps: u16,
+) -> Keypair {
+    let user = enrolled_user(svm, partner_admin, partner_id, module_id_hash);
+    send_ok(
+        svm,
+        ix_start_attempt(attestor.pubkey(), user.pubkey(), partner_id, module_id_hash),
+        &[attestor],
+    );
+    send_ok(
+        svm,
+        ix_submit_attempt(
+            attestor.pubkey(),
+            user.pubkey(),
+            partner_id,
+            module_id_hash,
+            score_bps,
+        ),
+        &[attestor],
     );
     user
 }
@@ -600,6 +709,12 @@ pub struct PartnerFixture {
     pub collection: Pubkey,
 }
 
+/// Amount the test platform pre-funds each Partner vault with. Covers
+/// several hundred Attempt PDAs, way more than any one test uses. Tests
+/// that care about vault exhaustion call ix_fund_partner or
+/// ix_refund_partner directly.
+pub const DEFAULT_VAULT_FUNDING: u64 = 1_000_000_000;
+
 pub fn register_partner_fixture() -> PartnerFixture {
     let PlatformFixture { mut svm, admin } = init_platform();
     let partner_id = [7u8; 16];
@@ -623,6 +738,15 @@ pub fn register_partner_fixture() -> PartnerFixture {
             None,
             None,
         ),
+        &[&admin],
+    );
+
+    // Pre-fund the partner vault so start_attempt calls have budget.
+    // This mirrors what Xcavate's treasury does after a partner pays
+    // their fiat invoice.
+    send_ok(
+        &mut svm,
+        ix_fund_partner(admin.pubkey(), partner_id, DEFAULT_VAULT_FUNDING),
         &[&admin],
     );
 

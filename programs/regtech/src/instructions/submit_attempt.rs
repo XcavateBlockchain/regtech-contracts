@@ -8,13 +8,14 @@ use crate::state::{Attempt, Config, Module, Partner};
 pub struct SubmitAttempt<'info> {
     pub attestor: Signer<'info>,
 
-    /// CHECK: We only use this pubkey to re-derive the Attempt PDA below.
-    /// The attestor is the one actually authorizing the submission. This is
-    /// safe because `start_attempt` required this user as a Signer, so
-    /// whoever controls this key has already opted in to taking the quiz.
-    /// If `start_attempt` ever stops requiring that signature, the attestor
-    /// could write scores against pubkeys nobody authorized, so if you
-    /// change that, come back and rethink this.
+    /// CHECK: Subject of the submission, used to re-derive the Attempt PDA.
+    /// Authorization chains back through the Enrollment PDA that start_attempt
+    /// required, which in turn required partner_admin to sign enroll_user.
+    /// The attestor can't write scores against an arbitrary pubkey because
+    /// the Attempt PDA won't exist unless start_attempt already succeeded
+    /// for that user, and start_attempt won't succeed without a live
+    /// Enrollment. So the user's consent comes from the partner's maker-
+    /// checker enrollment decision, not from a direct user signature here.
     pub user: UncheckedAccount<'info>,
 
     #[account(

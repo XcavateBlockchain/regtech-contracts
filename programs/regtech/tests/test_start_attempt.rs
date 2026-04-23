@@ -7,6 +7,7 @@ fn happy_path_writes_fresh_attempt() {
     let ModuleFixture {
         mut svm,
         partner_admin,
+        attestor,
         partner_id,
         module_id_hash,
         ..
@@ -16,8 +17,8 @@ fn happy_path_writes_fresh_attempt() {
 
     send_ok(
         &mut svm,
-        ix_start_attempt(user.pubkey(), partner_id, module_id_hash),
-        &[&user],
+        ix_start_attempt(attestor.pubkey(), user.pubkey(), partner_id, module_id_hash),
+        &[&attestor],
     );
 
     let a = read_attempt(&svm, &user.pubkey(), &partner_id, &module_id_hash);
@@ -36,6 +37,7 @@ fn two_users_can_start_on_same_module_independently() {
     let ModuleFixture {
         mut svm,
         partner_admin,
+        attestor,
         partner_id,
         module_id_hash,
         ..
@@ -46,13 +48,14 @@ fn two_users_can_start_on_same_module_independently() {
 
     send_ok(
         &mut svm,
-        ix_start_attempt(user_a.pubkey(), partner_id, module_id_hash),
-        &[&user_a],
+        ix_start_attempt(attestor.pubkey(), user_a.pubkey(), partner_id, module_id_hash),
+        &[&attestor],
     );
+    advance_blockhash(&mut svm);
     send_ok(
         &mut svm,
-        ix_start_attempt(user_b.pubkey(), partner_id, module_id_hash),
-        &[&user_b],
+        ix_start_attempt(attestor.pubkey(), user_b.pubkey(), partner_id, module_id_hash),
+        &[&attestor],
     );
 
     let attempt_a = read_attempt(&svm, &user_a.pubkey(), &partner_id, &module_id_hash);
@@ -66,6 +69,7 @@ fn duplicate_start_by_same_user_rejected() {
     let ModuleFixture {
         mut svm,
         partner_admin,
+        attestor,
         partner_id,
         module_id_hash,
         ..
@@ -75,14 +79,16 @@ fn duplicate_start_by_same_user_rejected() {
 
     send_ok(
         &mut svm,
-        ix_start_attempt(user.pubkey(), partner_id, module_id_hash),
-        &[&user],
+        ix_start_attempt(attestor.pubkey(), user.pubkey(), partner_id, module_id_hash),
+        &[&attestor],
     );
+
+    advance_blockhash(&mut svm);
 
     let res = send(
         &mut svm,
-        ix_start_attempt(user.pubkey(), partner_id, module_id_hash),
-        &[&user],
+        ix_start_attempt(attestor.pubkey(), user.pubkey(), partner_id, module_id_hash),
+        &[&attestor],
     );
     // Second init on the same PDA bounces off the system program with
     // "account already in use". Not one of our error codes.
@@ -93,18 +99,18 @@ fn duplicate_start_by_same_user_rejected() {
 fn start_attempt_without_enrollment_rejected() {
     let ModuleFixture {
         mut svm,
+        attestor,
         partner_id,
         module_id_hash,
         ..
     } = register_module_fixture();
 
     let user = Keypair::new();
-    fund(&mut svm, &user.pubkey(), 1_000_000_000);
 
     let res = send(
         &mut svm,
-        ix_start_attempt(user.pubkey(), partner_id, module_id_hash),
-        &[&user],
+        ix_start_attempt(attestor.pubkey(), user.pubkey(), partner_id, module_id_hash),
+        &[&attestor],
     );
     expect_error_code(res, 3012);
 }
@@ -114,6 +120,7 @@ fn start_attempt_after_revoked_enrollment_rejected() {
     let ModuleFixture {
         mut svm,
         partner_admin,
+        attestor,
         partner_id,
         module_id_hash,
         ..
@@ -135,8 +142,8 @@ fn start_attempt_after_revoked_enrollment_rejected() {
 
     let res = send(
         &mut svm,
-        ix_start_attempt(user.pubkey(), partner_id, module_id_hash),
-        &[&user],
+        ix_start_attempt(attestor.pubkey(), user.pubkey(), partner_id, module_id_hash),
+        &[&attestor],
     );
     expect_error_code(res, 3012);
 }
@@ -148,21 +155,43 @@ fn start_attempt_with_unknown_module_rejected() {
     // the module loader is the one that trips with AccountNotInitialized.
     let PartnerFixture {
         mut svm,
+        attestor,
         partner_id,
         ..
     } = register_partner_fixture();
 
     let user = Keypair::new();
-    fund(&mut svm, &user.pubkey(), 1_000_000_000);
-
     let fake_hash = code_hash("never-registered");
 
     let res = send(
         &mut svm,
-        ix_start_attempt(user.pubkey(), partner_id, fake_hash),
-        &[&user],
+        ix_start_attempt(attestor.pubkey(), user.pubkey(), partner_id, fake_hash),
+        &[&attestor],
     );
     expect_error_code(res, 3012);
+}
+
+#[test]
+fn non_attestor_signer_rejected() {
+    // has_one = attestor on Partner means only the key registered as
+    // attestor can sign start_attempt. If partner_admin tries to start
+    // on behalf of a user, they get NotAuthorized.
+    let ModuleFixture {
+        mut svm,
+        partner_admin,
+        partner_id,
+        module_id_hash,
+        ..
+    } = register_module_fixture();
+
+    let user = enrolled_user(&mut svm, &partner_admin, partner_id, module_id_hash);
+
+    let res = send(
+        &mut svm,
+        ix_start_attempt(partner_admin.pubkey(), user.pubkey(), partner_id, module_id_hash),
+        &[&partner_admin],
+    );
+    expect_regtech_error(res, RegtechError::NotAuthorized);
 }
 
 #[test]
@@ -170,6 +199,7 @@ fn rejects_when_paused() {
     let ModuleFixture {
         mut svm,
         partner_admin,
+        attestor,
         partner_id,
         module_id_hash,
         ..
@@ -184,8 +214,8 @@ fn rejects_when_paused() {
 
     let res = send(
         &mut svm,
-        ix_start_attempt(user.pubkey(), partner_id, module_id_hash),
-        &[&user],
+        ix_start_attempt(attestor.pubkey(), user.pubkey(), partner_id, module_id_hash),
+        &[&attestor],
     );
     expect_regtech_error(res, RegtechError::Paused);
 }
@@ -195,6 +225,7 @@ fn rejects_when_partner_inactive() {
     let ModuleFixture {
         mut svm,
         partner_admin,
+        attestor,
         partner_id,
         module_id_hash,
         ..
@@ -206,8 +237,8 @@ fn rejects_when_partner_inactive() {
 
     let res = send(
         &mut svm,
-        ix_start_attempt(user.pubkey(), partner_id, module_id_hash),
-        &[&user],
+        ix_start_attempt(attestor.pubkey(), user.pubkey(), partner_id, module_id_hash),
+        &[&attestor],
     );
     expect_regtech_error(res, RegtechError::PartnerInactive);
 }
@@ -217,6 +248,7 @@ fn rejects_when_module_inactive() {
     let ModuleFixture {
         mut svm,
         partner_admin,
+        attestor,
         partner_id,
         module_id_hash,
         ..
@@ -228,44 +260,88 @@ fn rejects_when_module_inactive() {
 
     let res = send(
         &mut svm,
-        ix_start_attempt(user.pubkey(), partner_id, module_id_hash),
-        &[&user],
+        ix_start_attempt(attestor.pubkey(), user.pubkey(), partner_id, module_id_hash),
+        &[&attestor],
     );
     expect_regtech_error(res, RegtechError::ModuleInactive);
 }
 
 #[test]
-fn user_with_insufficient_lamports_cannot_start() {
+fn rejects_when_vault_empty() {
+    // Drain the Partner vault down to the floor with a full refund, then
+    // try to start. No quiz budget, no start.
     let ModuleFixture {
         mut svm,
+        admin,
         partner_admin,
+        attestor,
         partner_id,
         module_id_hash,
         ..
     } = register_module_fixture();
 
-    // Enroll the user but skip funding them. Partner_admin paid for
-    // the Enrollment rent, but the Attempt PDA rent comes out of the
-    // user's own account.
-    let user = Keypair::new();
+    let user = enrolled_user(&mut svm, &partner_admin, partner_id, module_id_hash);
+
     send_ok(
         &mut svm,
-        ix_enroll_user(
-            partner_admin.pubkey(),
-            user.pubkey(),
-            partner_id,
-            module_id_hash,
-            0,
-        ),
-        &[&partner_admin],
+        ix_refund_partner(admin.pubkey(), partner_id, DEFAULT_VAULT_FUNDING),
+        &[&admin],
     );
 
     let res = send(
         &mut svm,
-        ix_start_attempt(user.pubkey(), partner_id, module_id_hash),
-        &[&user],
+        ix_start_attempt(attestor.pubkey(), user.pubkey(), partner_id, module_id_hash),
+        &[&attestor],
     );
-    // With zero lamports the system program won't create_account, so
-    // this fails with a plain InstructionError rather than one of ours.
-    assert!(res.is_err(), "user with 0 SOL cannot fund the Attempt PDA");
+    expect_regtech_error(res, RegtechError::VaultInsufficient);
+}
+
+#[test]
+fn attestor_is_net_zero_after_start() {
+    // Sanity check on the lamport-swap. Anchor's init debits the
+    // attestor for the Attempt rent, then our handler refunds the same
+    // amount from the Partner vault. The attestor should only be down
+    // the tx fee.
+    let ModuleFixture {
+        mut svm,
+        partner_admin,
+        attestor,
+        partner_id,
+        module_id_hash,
+        ..
+    } = register_module_fixture();
+
+    let user = enrolled_user(&mut svm, &partner_admin, partner_id, module_id_hash);
+
+    let attestor_before = svm.get_account(&attestor.pubkey()).unwrap().lamports;
+    let vault_before = svm
+        .get_account(&partner_pda(&partner_id))
+        .unwrap()
+        .lamports;
+
+    send_ok(
+        &mut svm,
+        ix_start_attempt(attestor.pubkey(), user.pubkey(), partner_id, module_id_hash),
+        &[&attestor],
+    );
+
+    let attestor_after = svm.get_account(&attestor.pubkey()).unwrap().lamports;
+    let vault_after = svm
+        .get_account(&partner_pda(&partner_id))
+        .unwrap()
+        .lamports;
+
+    // Attestor should only be down the tx fee (~5000 lamports base).
+    // Everything else got refunded from the vault.
+    let attestor_delta = attestor_before - attestor_after;
+    assert!(
+        attestor_delta < 100_000,
+        "attestor should only be down the tx fee, was down {attestor_delta}"
+    );
+
+    // Vault should be down by the rent cost of the Attempt PDA.
+    assert!(
+        vault_after < vault_before,
+        "partner vault should be debited for Attempt rent"
+    );
 }

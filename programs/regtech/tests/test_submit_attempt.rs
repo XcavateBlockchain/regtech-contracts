@@ -16,8 +16,8 @@ fn start_scenario() -> (litesvm::LiteSVM, Keypair, Keypair, [u8; 16], [u8; 32]) 
 
     send_ok(
         &mut svm,
-        ix_start_attempt(user.pubkey(), partner_id, module_id_hash),
-        &[&user],
+        ix_start_attempt(attestor.pubkey(), user.pubkey(), partner_id, module_id_hash),
+        &[&attestor],
     );
 
     (svm, user, attestor, partner_id, module_id_hash)
@@ -103,8 +103,8 @@ fn chain_computes_pass_flag_not_attestor_assertion() {
 
     send_ok(
         &mut svm,
-        ix_start_attempt(user.pubkey(), partner_id, strict_hash),
-        &[&user],
+        ix_start_attempt(attestor.pubkey(), user.pubkey(), partner_id, strict_hash),
+        &[&attestor],
     );
 
     // Attestor submits 8000. That's above the partner default of 7000 but
@@ -178,7 +178,7 @@ fn already_passed_rejects_further_submissions() {
         &[&attestor],
     );
 
-    // Warp past cooldown so that isn't what rejects us this time.
+    // Warp past cooldown so that isn't what trips here.
     warp_unix_seconds(&mut svm, 86_401);
 
     let res = send(
@@ -219,8 +219,8 @@ fn score_over_ten_thousand_rejected() {
 fn score_at_exactly_threshold_passes() {
     let (mut svm, user, attestor, partner_id, module_id_hash) = start_scenario();
 
-    // Module threshold is 7000, snapshotted from Partner, which itself
-    // snapshotted from Config.
+    // Module threshold is 7000, inherited from Partner, which inherited
+    // it from Config.
     send_ok(
         &mut svm,
         ix_submit_attempt(attestor.pubkey(), user.pubkey(), partner_id, module_id_hash, 7_000),

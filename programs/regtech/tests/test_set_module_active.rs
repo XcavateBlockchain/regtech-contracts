@@ -72,6 +72,7 @@ fn deactivation_blocks_start_attempt() {
     let ModuleFixture {
         mut svm,
         partner_admin,
+        attestor,
         partner_id,
         module_id_hash,
         ..
@@ -88,8 +89,8 @@ fn deactivation_blocks_start_attempt() {
 
     let res = send(
         &mut svm,
-        ix_start_attempt(user.pubkey(), partner_id, module_id_hash),
-        &[&user],
+        ix_start_attempt(attestor.pubkey(), user.pubkey(), partner_id, module_id_hash),
+        &[&attestor],
     );
     expect_regtech_error(res, RegtechError::ModuleInactive);
 }
@@ -109,8 +110,8 @@ fn deactivation_blocks_submit_attempt() {
     let user = enrolled_user(&mut svm, &partner_admin, partner_id, module_id_hash);
     send_ok(
         &mut svm,
-        ix_start_attempt(user.pubkey(), partner_id, module_id_hash),
-        &[&user],
+        ix_start_attempt(attestor.pubkey(), user.pubkey(), partner_id, module_id_hash),
+        &[&attestor],
     );
 
     // Partner admin pulls the module.
@@ -137,6 +138,7 @@ fn one_module_deactivation_doesnt_affect_others() {
     let ModuleFixture {
         mut svm,
         partner_admin,
+        attestor,
         partner_id,
         module_id_hash: module_a_hash,
         ..
@@ -169,7 +171,7 @@ fn one_module_deactivation_doesnt_affect_others() {
     let user = enrolled_user(&mut svm, &partner_admin, partner_id, module_b_hash);
     send_ok(
         &mut svm,
-        ix_start_attempt(user.pubkey(), partner_id, module_b_hash),
-        &[&user],
+        ix_start_attempt(attestor.pubkey(), user.pubkey(), partner_id, module_b_hash),
+        &[&attestor],
     );
 }

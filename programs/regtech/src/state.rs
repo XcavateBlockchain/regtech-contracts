@@ -69,3 +69,24 @@ pub struct Enrollment {
     pub reason_code: u8,
     pub bump: u8,
 }
+
+#[account]
+#[derive(InitSpace)]
+pub struct Credential {
+    pub user: Pubkey,
+    pub partner_id: [u8; 16],
+    pub module_id_hash: [u8; 32],
+    pub score_bps: u16,
+    pub issued_at: i64,
+    pub issued_by: Pubkey,
+    // Stamped at issuance from the module's current policy. If the module
+    // changes its expiry later, credentials already out the door keep the
+    // deadline they were issued with.
+    pub expires_at: Option<i64>,
+    // Filled in by a future revoke_credential ix. None means still live.
+    pub revoked_at: Option<i64>,
+    // Filled in when the off-chain mpl-core Asset mint gets linked back.
+    // Option so claim_credential can land before that ix exists.
+    pub credential_asset: Option<Pubkey>,
+    pub bump: u8,
+}
