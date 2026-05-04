@@ -8,7 +8,6 @@ use crate::state::{Enrollment, Partner};
 // other admin ops.
 #[derive(Accounts)]
 pub struct RevokeEnrollment<'info> {
-    #[account(mut)]
     pub partner_admin: Signer<'info>,
 
     #[account(

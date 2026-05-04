@@ -86,9 +86,8 @@ fn imposter_rejected() {
 
 #[test]
 fn duplicate_enrollment_rejected() {
-    // We use `init` rather than `init_if_needed` so a duplicate enroll
-    // on the same (user, partner, module) fails loudly instead of
-    // silently overwriting. Revoke-then-reenroll is the refresh path.
+    // The data_is_empty() guard means a duplicate enroll fails with
+    // AlreadyInitialized. Revoke-then-reenroll is the refresh path.
     let ModuleFixture {
         mut svm,
         partner_admin,
@@ -110,6 +109,8 @@ fn duplicate_enrollment_rejected() {
         &[&partner_admin],
     );
 
+    advance_blockhash(&mut svm);
+
     let res = send(
         &mut svm,
         ix_enroll_user(
@@ -121,7 +122,34 @@ fn duplicate_enrollment_rejected() {
         ),
         &[&partner_admin],
     );
-    assert!(res.is_err(), "second enroll for same user/module fails init");
+    expect_regtech_error(res, RegtechError::AlreadyInitialized);
+}
+
+#[test]
+fn enroll_rejected_when_paused() {
+    let ModuleFixture {
+        mut svm,
+        partner_admin,
+        partner_id,
+        module_id_hash,
+        ..
+    } = register_module_fixture();
+
+    set_config_paused(&mut svm, true);
+
+    let user = Keypair::new();
+    let res = send(
+        &mut svm,
+        ix_enroll_user(
+            partner_admin.pubkey(),
+            user.pubkey(),
+            partner_id,
+            module_id_hash,
+            0,
+        ),
+        &[&partner_admin],
+    );
+    expect_regtech_error(res, RegtechError::Paused);
 }
 
 #[test]

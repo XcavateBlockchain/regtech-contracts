@@ -6,7 +6,6 @@ use crate::state::Config;
 
 #[derive(Accounts)]
 pub struct SetPaused<'info> {
-    #[account(mut)]
     pub admin: Signer<'info>,
 
     #[account(

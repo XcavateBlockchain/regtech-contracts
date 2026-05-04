@@ -48,4 +48,10 @@ pub enum RegtechError {
     QuizQuotaExhausted,
     #[msg("Amount is invalid for this operation")]
     InvalidAmount,
+    #[msg("Account is already initialized")]
+    AlreadyInitialized,
+    #[msg("Credential has already been revoked")]
+    AlreadyRevoked,
+    #[msg("Credential must be revoked before closing")]
+    NotRevoked,
 }

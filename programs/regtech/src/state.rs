@@ -89,7 +89,6 @@ pub struct Credential {
     // changes its expiry later, credentials already out the door keep the
     // deadline they were issued with.
     pub expires_at: Option<i64>,
-    // Filled in by a future revoke_credential ix. None means still live.
     pub revoked_at: Option<i64>,
     // Filled in when the off-chain mpl-core Asset mint gets linked back.
     // Option so claim_credential can land before that ix exists.

@@ -240,6 +240,84 @@ fn imposter_rejected() {
 }
 
 #[test]
+fn rejects_when_vault_insufficient() {
+    let ModuleFixture {
+        mut svm,
+        admin,
+        partner_admin,
+        attestor,
+        partner_id,
+        module_id_hash,
+        ..
+    } = register_module_fixture();
+
+    let user = passed_user(
+        &mut svm,
+        &partner_admin,
+        &attestor,
+        partner_id,
+        module_id_hash,
+        PASSING_SCORE,
+    );
+
+    // Drain the vault so there is not enough left for a Credential PDA.
+    let remaining = vault_available(&svm, &partner_id);
+    send_ok(
+        &mut svm,
+        ix_refund_partner(admin.pubkey(), partner_id, remaining),
+        &[&admin],
+    );
+
+    let res = send(
+        &mut svm,
+        ix_claim_credential(
+            partner_admin.pubkey(),
+            user.pubkey(),
+            partner_id,
+            module_id_hash,
+            "ipfs://test".to_string(),
+        ),
+        &[&partner_admin],
+    );
+    expect_regtech_error(res, RegtechError::VaultInsufficient);
+}
+
+#[test]
+fn rejects_metadata_uri_too_long() {
+    let ModuleFixture {
+        mut svm,
+        partner_admin,
+        attestor,
+        partner_id,
+        module_id_hash,
+        ..
+    } = register_module_fixture();
+
+    let user = passed_user(
+        &mut svm,
+        &partner_admin,
+        &attestor,
+        partner_id,
+        module_id_hash,
+        PASSING_SCORE,
+    );
+
+    let long_uri = "x".repeat(257);
+    let res = send(
+        &mut svm,
+        ix_claim_credential(
+            partner_admin.pubkey(),
+            user.pubkey(),
+            partner_id,
+            module_id_hash,
+            long_uri,
+        ),
+        &[&partner_admin],
+    );
+    expect_regtech_error(res, RegtechError::StringTooLong);
+}
+
+#[test]
 fn rejects_when_paused() {
     let ModuleFixture {
         mut svm,

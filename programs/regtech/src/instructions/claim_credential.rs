@@ -115,6 +115,11 @@ pub(crate) fn handle_claim_credential(
         .ok_or(error!(RegtechError::ArithmeticOverflow))?;
     require!(vault_available >= deficit, RegtechError::VaultInsufficient);
 
+    require!(
+        credential_info.data_is_empty(),
+        RegtechError::AlreadyInitialized
+    );
+
     let credential_seeds: &[&[u8]] = &[
         CREDENTIAL_SEED,
         user_key.as_ref(),

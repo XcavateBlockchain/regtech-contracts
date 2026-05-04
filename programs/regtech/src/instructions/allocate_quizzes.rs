@@ -11,7 +11,6 @@ use crate::state::{Config, Partner};
 // allocate_quizzes and fund_partner into one transaction for atomicity.
 #[derive(Accounts)]
 pub struct AllocateQuizzes<'info> {
-    #[account(mut)]
     pub admin: Signer<'info>,
 
     #[account(

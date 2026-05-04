@@ -168,6 +168,49 @@ fn cooldown_elapsed_allows_resubmission() {
 }
 
 #[test]
+fn cooldown_exact_boundary_allows_resubmission() {
+    let (mut svm, user, attestor, partner_id, module_id_hash) = start_scenario();
+
+    send_ok(
+        &mut svm,
+        ix_submit_attempt(attestor.pubkey(), user.pubkey(), partner_id, module_id_hash, 6_000),
+        &[&attestor],
+    );
+
+    // Warp exactly the cooldown (86400s). The code uses >= so this should pass.
+    warp_unix_seconds(&mut svm, 86_400);
+
+    send_ok(
+        &mut svm,
+        ix_submit_attempt(attestor.pubkey(), user.pubkey(), partner_id, module_id_hash, 6_500),
+        &[&attestor],
+    );
+
+    let a = read_attempt(&svm, &user.pubkey(), &partner_id, &module_id_hash);
+    assert_eq!(a.attempt_count, 2);
+}
+
+#[test]
+fn cooldown_one_second_short_rejects() {
+    let (mut svm, user, attestor, partner_id, module_id_hash) = start_scenario();
+
+    send_ok(
+        &mut svm,
+        ix_submit_attempt(attestor.pubkey(), user.pubkey(), partner_id, module_id_hash, 6_000),
+        &[&attestor],
+    );
+
+    warp_unix_seconds(&mut svm, 86_399);
+
+    let res = send(
+        &mut svm,
+        ix_submit_attempt(attestor.pubkey(), user.pubkey(), partner_id, module_id_hash, 6_500),
+        &[&attestor],
+    );
+    expect_regtech_error(res, RegtechError::CooldownNotElapsed);
+}
+
+#[test]
 fn already_passed_rejects_further_submissions() {
     let (mut svm, user, attestor, partner_id, module_id_hash) = start_scenario();
 

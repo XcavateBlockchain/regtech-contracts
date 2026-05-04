@@ -9,7 +9,6 @@ use crate::state::{Module, Partner};
 // globally. See the same comment on set_partner_active.
 #[derive(Accounts)]
 pub struct SetModuleActive<'info> {
-    #[account(mut)]
     pub partner_admin: Signer<'info>,
 
     #[account(

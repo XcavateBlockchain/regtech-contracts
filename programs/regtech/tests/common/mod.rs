@@ -312,6 +312,7 @@ pub fn ix_enroll_user(
         accounts: regtech::accounts::EnrollUser {
             partner_admin,
             user,
+            config: config_pda(),
             partner: partner_pda(&partner_id),
             module: module_pda(&partner_id, &module_id_hash),
             enrollment: enrollment_pda(&user, &partner_id, &module_id_hash),
@@ -509,6 +510,63 @@ pub fn ix_refund_quizzes(
         }
         .to_account_metas(None),
         data: regtech::instruction::RefundQuizzes { count, reason_code }.data(),
+    }
+}
+
+pub fn ix_revoke_credential(
+    partner_admin: Pubkey,
+    user: Pubkey,
+    partner_id: [u8; 16],
+    module_id_hash: [u8; 32],
+    reason_code: u8,
+) -> Instruction {
+    Instruction {
+        program_id: regtech::ID,
+        accounts: regtech::accounts::RevokeCredential {
+            partner_admin,
+            partner: partner_pda(&partner_id),
+            credential: credential_pda(&user, &partner_id, &module_id_hash),
+        }
+        .to_account_metas(None),
+        data: regtech::instruction::RevokeCredential { reason_code }.data(),
+    }
+}
+
+pub fn ix_close_attempt(
+    partner_admin: Pubkey,
+    user: Pubkey,
+    partner_id: [u8; 16],
+    module_id_hash: [u8; 32],
+    reason_code: u8,
+) -> Instruction {
+    Instruction {
+        program_id: regtech::ID,
+        accounts: regtech::accounts::CloseAttempt {
+            partner_admin,
+            partner: partner_pda(&partner_id),
+            attempt: attempt_pda(&user, &partner_id, &module_id_hash),
+        }
+        .to_account_metas(None),
+        data: regtech::instruction::CloseAttempt { reason_code }.data(),
+    }
+}
+
+pub fn ix_close_credential(
+    partner_admin: Pubkey,
+    user: Pubkey,
+    partner_id: [u8; 16],
+    module_id_hash: [u8; 32],
+    reason_code: u8,
+) -> Instruction {
+    Instruction {
+        program_id: regtech::ID,
+        accounts: regtech::accounts::CloseCredential {
+            partner_admin,
+            partner: partner_pda(&partner_id),
+            credential: credential_pda(&user, &partner_id, &module_id_hash),
+        }
+        .to_account_metas(None),
+        data: regtech::instruction::CloseCredential { reason_code }.data(),
     }
 }
 

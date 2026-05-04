@@ -1,9 +1,9 @@
 use anchor_lang::prelude::*;
 use anchor_lang::solana_program::{program::invoke_signed, system_instruction};
 
-use crate::constants::{ENROLLMENT_SEED, MODULE_SEED, PARTNER_SEED};
+use crate::constants::{CONFIG_SEED, ENROLLMENT_SEED, MODULE_SEED, PARTNER_SEED};
 use crate::error::RegtechError;
-use crate::state::{Enrollment, Module, Partner};
+use crate::state::{Config, Enrollment, Module, Partner};
 
 #[derive(Accounts)]
 pub struct EnrollUser<'info> {
@@ -12,6 +12,13 @@ pub struct EnrollUser<'info> {
     /// CHECK: only used as a seed for the Enrollment PDA and recorded on it.
     /// Not required to sign. The partner_admin is the authorizing party here.
     pub user: UncheckedAccount<'info>,
+
+    #[account(
+        seeds = [CONFIG_SEED],
+        bump = config.bump,
+        constraint = !config.paused @ RegtechError::Paused,
+    )]
+    pub config: Account<'info, Config>,
 
     #[account(
         mut,
@@ -71,6 +78,11 @@ pub(crate) fn handle_enroll_user(
         .checked_sub(partner_own_rent)
         .ok_or(error!(RegtechError::ArithmeticOverflow))?;
     require!(vault_available >= deficit, RegtechError::VaultInsufficient);
+
+    require!(
+        enrollment_info.data_is_empty(),
+        RegtechError::AlreadyInitialized
+    );
 
     let enrollment_seeds: &[&[u8]] = &[
         ENROLLMENT_SEED,

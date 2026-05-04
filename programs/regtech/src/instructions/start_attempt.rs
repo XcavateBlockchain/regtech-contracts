@@ -102,6 +102,11 @@ pub(crate) fn handle_start_attempt(ctx: Context<StartAttempt>) -> Result<()> {
         .ok_or(error!(RegtechError::ArithmeticOverflow))?;
     require!(vault_available >= deficit, RegtechError::VaultInsufficient);
 
+    require!(
+        attempt_info.data_is_empty(),
+        RegtechError::AlreadyInitialized
+    );
+
     let attempt_seeds: &[&[u8]] = &[
         ATTEMPT_SEED,
         user_key.as_ref(),

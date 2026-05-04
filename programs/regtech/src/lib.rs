@@ -13,6 +13,8 @@ use anchor_lang::prelude::*;
 pub use instructions::accept_admin_update::*;
 pub use instructions::allocate_quizzes::*;
 pub use instructions::claim_credential::*;
+pub use instructions::close_attempt::*;
+pub use instructions::close_credential::*;
 pub use instructions::enroll_user::*;
 pub use instructions::fund_partner::*;
 pub use instructions::initialize_config::*;
@@ -21,6 +23,7 @@ pub use instructions::refund_partner::*;
 pub use instructions::refund_quizzes::*;
 pub use instructions::register_module::*;
 pub use instructions::register_partner::*;
+pub use instructions::revoke_credential::*;
 pub use instructions::revoke_enrollment::*;
 pub use instructions::rotate_attestor::*;
 pub use instructions::set_module_active::*;
@@ -140,6 +143,21 @@ pub mod regtech {
 
     pub fn claim_credential(ctx: Context<ClaimCredential>, metadata_uri: String) -> Result<()> {
         instructions::claim_credential::handle_claim_credential(ctx, metadata_uri)
+    }
+
+    pub fn revoke_credential(
+        ctx: Context<RevokeCredential>,
+        reason_code: u8,
+    ) -> Result<()> {
+        instructions::revoke_credential::handle_revoke_credential(ctx, reason_code)
+    }
+
+    pub fn close_attempt(ctx: Context<CloseAttempt>, reason_code: u8) -> Result<()> {
+        instructions::close_attempt::handle_close_attempt(ctx, reason_code)
+    }
+
+    pub fn close_credential(ctx: Context<CloseCredential>, reason_code: u8) -> Result<()> {
+        instructions::close_credential::handle_close_credential(ctx, reason_code)
     }
 
     pub fn fund_partner(ctx: Context<FundPartner>, amount: u64) -> Result<()> {

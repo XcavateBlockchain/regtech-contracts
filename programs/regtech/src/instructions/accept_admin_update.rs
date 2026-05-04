@@ -8,7 +8,6 @@ use crate::state::Config;
 pub struct AcceptAdminUpdate<'info> {
     // The candidate signs here to prove they actually control the pubkey that
     // was proposed.
-    #[account(mut)]
     pub new_admin: Signer<'info>,
 
     #[account(

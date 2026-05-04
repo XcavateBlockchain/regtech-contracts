@@ -6,7 +6,6 @@ use crate::state::Partner;
 
 #[derive(Accounts)]
 pub struct RotateAttestor<'info> {
-    #[account(mut)]
     pub partner_admin: Signer<'info>,
 
     #[account(

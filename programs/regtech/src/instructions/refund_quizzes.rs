@@ -13,7 +13,6 @@ use crate::state::{Config, Partner};
 // you can't refund more than the partner actually has outstanding.
 #[derive(Accounts)]
 pub struct RefundQuizzes<'info> {
-    #[account(mut)]
     pub admin: Signer<'info>,
 
     #[account(

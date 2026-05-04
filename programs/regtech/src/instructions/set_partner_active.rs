@@ -6,7 +6,6 @@ use crate::state::{Config, Partner};
 
 #[derive(Accounts)]
 pub struct SetPartnerActive<'info> {
-    #[account(mut)]
     pub admin: Signer<'info>,
 
     #[account(
