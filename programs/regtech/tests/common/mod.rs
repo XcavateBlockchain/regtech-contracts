@@ -435,6 +435,7 @@ pub fn ix_claim_credential(
     user: Pubkey,
     partner_id: [u8; 16],
     module_id_hash: [u8; 32],
+    metadata_uri: String,
 ) -> Instruction {
     Instruction {
         program_id: regtech::ID,
@@ -449,7 +450,7 @@ pub fn ix_claim_credential(
             system_program: system_program::ID,
         }
         .to_account_metas(None),
-        data: regtech::instruction::ClaimCredential {}.data(),
+        data: regtech::instruction::ClaimCredential { metadata_uri }.data(),
     }
 }
 
@@ -477,6 +478,37 @@ pub fn ix_refund_partner(admin: Pubkey, partner_id: [u8; 16], amount: u64) -> In
         }
         .to_account_metas(None),
         data: regtech::instruction::RefundPartner { amount }.data(),
+    }
+}
+
+pub fn ix_allocate_quizzes(admin: Pubkey, partner_id: [u8; 16], count: u64) -> Instruction {
+    Instruction {
+        program_id: regtech::ID,
+        accounts: regtech::accounts::AllocateQuizzes {
+            admin,
+            config: config_pda(),
+            partner: partner_pda(&partner_id),
+        }
+        .to_account_metas(None),
+        data: regtech::instruction::AllocateQuizzes { count }.data(),
+    }
+}
+
+pub fn ix_refund_quizzes(
+    admin: Pubkey,
+    partner_id: [u8; 16],
+    count: u64,
+    reason_code: u8,
+) -> Instruction {
+    Instruction {
+        program_id: regtech::ID,
+        accounts: regtech::accounts::RefundQuizzes {
+            admin,
+            config: config_pda(),
+            partner: partner_pda(&partner_id),
+        }
+        .to_account_metas(None),
+        data: regtech::instruction::RefundQuizzes { count, reason_code }.data(),
     }
 }
 
@@ -568,6 +600,13 @@ pub fn install_truncated_collection(svm: &mut LiteSVM, key: Pubkey) {
 }
 
 // ----- State readers -----
+
+pub fn vault_available(svm: &LiteSVM, partner_id: &[u8; 16]) -> u64 {
+    let key = partner_pda(partner_id);
+    let account = svm.get_account(&key).expect("partner account");
+    let rent = solana_program::rent::Rent::default().minimum_balance(account.data.len());
+    account.lamports.saturating_sub(rent)
+}
 
 pub fn read_config(svm: &LiteSVM) -> Config {
     let account = svm.get_account(&config_pda()).expect("config account exists");
@@ -715,6 +754,10 @@ pub struct PartnerFixture {
 /// ix_refund_partner directly.
 pub const DEFAULT_VAULT_FUNDING: u64 = 1_000_000_000;
 
+/// Quiz quota the fixture pre-allocates. Plenty of headroom for any test
+/// that doesn't specifically exercise the quota path.
+pub const DEFAULT_QUIZ_ALLOCATION: u64 = 1_000;
+
 pub fn register_partner_fixture() -> PartnerFixture {
     let PlatformFixture { mut svm, admin } = init_platform();
     let partner_id = [7u8; 16];
@@ -747,6 +790,14 @@ pub fn register_partner_fixture() -> PartnerFixture {
     send_ok(
         &mut svm,
         ix_fund_partner(admin.pubkey(), partner_id, DEFAULT_VAULT_FUNDING),
+        &[&admin],
+    );
+    // Allocate the contractual quiz quota separately. Same pattern as
+    // the funding call, kept distinct so the allocation side of the
+    // ledger stays separately auditable.
+    send_ok(
+        &mut svm,
+        ix_allocate_quizzes(admin.pubkey(), partner_id, DEFAULT_QUIZ_ALLOCATION),
         &[&admin],
     );
 

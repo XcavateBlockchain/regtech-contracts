@@ -29,7 +29,7 @@ pub struct RefundPartner<'info> {
 }
 
 pub(crate) fn handle_refund_partner(ctx: Context<RefundPartner>, amount: u64) -> Result<()> {
-    require!(amount > 0, RegtechError::VaultInsufficient);
+    require!(amount > 0, RegtechError::InvalidAmount);
 
     let partner_info = ctx.accounts.partner.to_account_info();
     let admin_info = ctx.accounts.admin.to_account_info();

@@ -34,7 +34,7 @@ pub struct FundPartner<'info> {
 }
 
 pub(crate) fn handle_fund_partner(ctx: Context<FundPartner>, amount: u64) -> Result<()> {
-    require!(amount > 0, RegtechError::VaultInsufficient);
+    require!(amount > 0, RegtechError::InvalidAmount);
 
     // Admin is System-owned, so we route the debit through the system
     // program. The receiver is our Partner PDA.

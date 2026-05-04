@@ -28,7 +28,7 @@ fn happy_path_writes_credential_from_passed_attempt() {
 
     send_ok(
         &mut svm,
-        ix_claim_credential(partner_admin.pubkey(), user.pubkey(), partner_id, module_id_hash),
+        ix_claim_credential(partner_admin.pubkey(), user.pubkey(), partner_id, module_id_hash, "ipfs://test-credential".to_string()),
         &[&partner_admin],
     );
 
@@ -44,6 +44,7 @@ fn happy_path_writes_credential_from_passed_attempt() {
     assert!(c.expires_at.is_some(), "expiry should be snapshotted from module");
     assert!(c.revoked_at.is_none(), "fresh credential is not revoked");
     assert!(c.credential_asset.is_none(), "asset link is set later, not at claim");
+    assert_eq!(c.metadata_uri, "ipfs://test-credential");
 }
 
 #[test]
@@ -72,7 +73,7 @@ fn claim_rejected_when_attempt_not_passed() {
 
     let res = send(
         &mut svm,
-        ix_claim_credential(partner_admin.pubkey(), user.pubkey(), partner_id, module_id_hash),
+        ix_claim_credential(partner_admin.pubkey(), user.pubkey(), partner_id, module_id_hash, "ipfs://test-credential".to_string()),
         &[&partner_admin],
     );
     expect_regtech_error(res, RegtechError::AttemptNotPassed);
@@ -92,7 +93,7 @@ fn claim_rejected_without_attempt() {
 
     let res = send(
         &mut svm,
-        ix_claim_credential(partner_admin.pubkey(), user.pubkey(), partner_id, module_id_hash),
+        ix_claim_credential(partner_admin.pubkey(), user.pubkey(), partner_id, module_id_hash, "ipfs://test-credential".to_string()),
         &[&partner_admin],
     );
     expect_error_code(res, 3012);
@@ -132,7 +133,7 @@ fn claim_rejected_after_enrollment_revoked() {
 
     let res = send(
         &mut svm,
-        ix_claim_credential(partner_admin.pubkey(), user.pubkey(), partner_id, module_id_hash),
+        ix_claim_credential(partner_admin.pubkey(), user.pubkey(), partner_id, module_id_hash, "ipfs://test-credential".to_string()),
         &[&partner_admin],
     );
     expect_error_code(res, 3012);
@@ -162,7 +163,7 @@ fn duplicate_claim_rejected() {
 
     send_ok(
         &mut svm,
-        ix_claim_credential(partner_admin.pubkey(), user.pubkey(), partner_id, module_id_hash),
+        ix_claim_credential(partner_admin.pubkey(), user.pubkey(), partner_id, module_id_hash, "ipfs://test-credential".to_string()),
         &[&partner_admin],
     );
 
@@ -170,7 +171,7 @@ fn duplicate_claim_rejected() {
 
     let res = send(
         &mut svm,
-        ix_claim_credential(partner_admin.pubkey(), user.pubkey(), partner_id, module_id_hash),
+        ix_claim_credential(partner_admin.pubkey(), user.pubkey(), partner_id, module_id_hash, "ipfs://test-credential".to_string()),
         &[&partner_admin],
     );
     assert!(res.is_err(), "second claim for same triple should fail init");
@@ -201,7 +202,7 @@ fn non_partner_admin_caller_rejected() {
 
     let res = send(
         &mut svm,
-        ix_claim_credential(admin.pubkey(), user.pubkey(), partner_id, module_id_hash),
+        ix_claim_credential(admin.pubkey(), user.pubkey(), partner_id, module_id_hash, "ipfs://test-credential".to_string()),
         &[&admin],
     );
     expect_regtech_error(res, RegtechError::NotAuthorized);
@@ -232,7 +233,7 @@ fn imposter_rejected() {
 
     let res = send(
         &mut svm,
-        ix_claim_credential(imposter.pubkey(), user.pubkey(), partner_id, module_id_hash),
+        ix_claim_credential(imposter.pubkey(), user.pubkey(), partner_id, module_id_hash, "ipfs://test-credential".to_string()),
         &[&imposter],
     );
     expect_regtech_error(res, RegtechError::NotAuthorized);
@@ -262,7 +263,7 @@ fn rejects_when_paused() {
 
     let res = send(
         &mut svm,
-        ix_claim_credential(partner_admin.pubkey(), user.pubkey(), partner_id, module_id_hash),
+        ix_claim_credential(partner_admin.pubkey(), user.pubkey(), partner_id, module_id_hash, "ipfs://test-credential".to_string()),
         &[&partner_admin],
     );
     expect_regtech_error(res, RegtechError::Paused);
@@ -292,7 +293,7 @@ fn rejects_when_partner_inactive() {
 
     let res = send(
         &mut svm,
-        ix_claim_credential(partner_admin.pubkey(), user.pubkey(), partner_id, module_id_hash),
+        ix_claim_credential(partner_admin.pubkey(), user.pubkey(), partner_id, module_id_hash, "ipfs://test-credential".to_string()),
         &[&partner_admin],
     );
     expect_regtech_error(res, RegtechError::PartnerInactive);
@@ -322,7 +323,7 @@ fn rejects_when_module_inactive() {
 
     let res = send(
         &mut svm,
-        ix_claim_credential(partner_admin.pubkey(), user.pubkey(), partner_id, module_id_hash),
+        ix_claim_credential(partner_admin.pubkey(), user.pubkey(), partner_id, module_id_hash, "ipfs://test-credential".to_string()),
         &[&partner_admin],
     );
     expect_regtech_error(res, RegtechError::ModuleInactive);
@@ -366,7 +367,7 @@ fn module_without_expiry_produces_credential_without_expiry() {
 
     send_ok(
         &mut svm,
-        ix_claim_credential(partner_admin.pubkey(), user.pubkey(), partner_id, module_id_hash),
+        ix_claim_credential(partner_admin.pubkey(), user.pubkey(), partner_id, module_id_hash, "ipfs://test-credential".to_string()),
         &[&partner_admin],
     );
 
@@ -403,6 +404,11 @@ fn partner_b_cannot_claim_for_partner_a_user() {
     send_ok(
         &mut svm,
         ix_fund_partner(admin.pubkey(), partner_a_id, DEFAULT_VAULT_FUNDING),
+        &[&admin],
+    );
+    send_ok(
+        &mut svm,
+        ix_allocate_quizzes(admin.pubkey(), partner_a_id, DEFAULT_QUIZ_ALLOCATION),
         &[&admin],
     );
 
@@ -459,7 +465,7 @@ fn partner_b_cannot_claim_for_partner_a_user() {
     // don't line up with A's on-chain Enrollment/Attempt, tx fails.
     let res = send(
         &mut svm,
-        ix_claim_credential(partner_admin_b.pubkey(), user.pubkey(), partner_b_id, module_a_hash),
+        ix_claim_credential(partner_admin_b.pubkey(), user.pubkey(), partner_b_id, module_a_hash, "ipfs://test-credential".to_string()),
         &[&partner_admin_b],
     );
     assert!(res.is_err(), "partner B should not be able to claim on A's data");

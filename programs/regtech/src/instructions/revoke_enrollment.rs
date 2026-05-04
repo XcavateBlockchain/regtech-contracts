@@ -12,19 +12,20 @@ pub struct RevokeEnrollment<'info> {
     pub partner_admin: Signer<'info>,
 
     #[account(
+        mut,
         seeds = [PARTNER_SEED, &partner.partner_id],
         bump = partner.bump,
         has_one = partner_admin @ RegtechError::NotAuthorized,
     )]
     pub partner: Account<'info, Partner>,
 
-    // `close = partner_admin` sends the Enrollment's lamports back to
-    // the partner_admin who paid for it, and zeros the account. After
-    // that the PDA reads back as AccountNotInitialized, which is what
+    // `close = partner` sends the Enrollment's lamports back to the
+    // Partner vault that paid for it, and zeros the account. After that
+    // the PDA reads back as AccountNotInitialized, which is what
     // start_attempt's loader trips on.
     #[account(
         mut,
-        close = partner_admin,
+        close = partner,
         seeds = [
             ENROLLMENT_SEED,
             enrollment.user.as_ref(),

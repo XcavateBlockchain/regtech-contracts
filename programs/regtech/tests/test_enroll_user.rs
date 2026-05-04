@@ -199,7 +199,10 @@ fn revoke_happy_path_returns_rent() {
 
     let user = Keypair::new();
 
-    let balance_before = svm.get_account(&partner_admin.pubkey()).unwrap().lamports;
+    let vault_before = svm
+        .get_account(&partner_pda(&partner_id))
+        .unwrap()
+        .lamports;
 
     send_ok(
         &mut svm,
@@ -213,10 +216,13 @@ fn revoke_happy_path_returns_rent() {
         &[&partner_admin],
     );
 
-    let balance_after_enroll = svm.get_account(&partner_admin.pubkey()).unwrap().lamports;
+    let vault_after_enroll = svm
+        .get_account(&partner_pda(&partner_id))
+        .unwrap()
+        .lamports;
     assert!(
-        balance_after_enroll < balance_before,
-        "partner_admin paid rent + fee for enrollment"
+        vault_after_enroll < vault_before,
+        "vault paid rent for enrollment"
     );
 
     send_ok(
@@ -231,13 +237,15 @@ fn revoke_happy_path_returns_rent() {
         &[&partner_admin],
     );
 
-    let balance_after_revoke = svm.get_account(&partner_admin.pubkey()).unwrap().lamports;
+    let vault_after_revoke = svm
+        .get_account(&partner_pda(&partner_id))
+        .unwrap()
+        .lamports;
     assert!(
-        balance_after_revoke > balance_after_enroll,
-        "partner_admin got rent back on revoke (minus a second tx fee)"
+        vault_after_revoke > vault_after_enroll,
+        "vault got rent back on revoke"
     );
 
-    // Enrollment account is closed.
     assert!(
         svm.get_account(&enrollment_pda(&user.pubkey(), &partner_id, &module_id_hash))
             .map(|a| a.data.is_empty())
@@ -307,6 +315,11 @@ fn partner_b_cannot_revoke_partner_a_enrollment() {
             None,
             None,
         ),
+        &[&admin],
+    );
+    send_ok(
+        &mut svm,
+        ix_fund_partner(admin.pubkey(), partner_a_id, DEFAULT_VAULT_FUNDING),
         &[&admin],
     );
 

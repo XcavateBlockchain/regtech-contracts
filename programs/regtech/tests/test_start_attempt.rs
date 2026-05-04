@@ -282,9 +282,10 @@ fn rejects_when_vault_empty() {
 
     let user = enrolled_user(&mut svm, &partner_admin, partner_id, module_id_hash);
 
+    let refundable = vault_available(&svm, &partner_id);
     send_ok(
         &mut svm,
-        ix_refund_partner(admin.pubkey(), partner_id, DEFAULT_VAULT_FUNDING),
+        ix_refund_partner(admin.pubkey(), partner_id, refundable),
         &[&admin],
     );
 

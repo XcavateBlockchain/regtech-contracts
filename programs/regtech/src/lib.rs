@@ -1,4 +1,7 @@
 #![allow(clippy::diverging_sub_expression)]
+// Anchor's `#[program]` macro expands to dispatch code that trips this
+// clippy lint. It's a false positive against macro output, not our code,
+// so we silence it at the crate level.
 
 pub mod constants;
 pub mod error;
@@ -8,12 +11,14 @@ pub mod state;
 use anchor_lang::prelude::*;
 
 pub use instructions::accept_admin_update::*;
+pub use instructions::allocate_quizzes::*;
 pub use instructions::claim_credential::*;
 pub use instructions::enroll_user::*;
 pub use instructions::fund_partner::*;
 pub use instructions::initialize_config::*;
 pub use instructions::propose_admin_update::*;
 pub use instructions::refund_partner::*;
+pub use instructions::refund_quizzes::*;
 pub use instructions::register_module::*;
 pub use instructions::register_partner::*;
 pub use instructions::revoke_enrollment::*;
@@ -133,8 +138,8 @@ pub mod regtech {
         instructions::revoke_enrollment::handle_revoke_enrollment(ctx, reason_code)
     }
 
-    pub fn claim_credential(ctx: Context<ClaimCredential>) -> Result<()> {
-        instructions::claim_credential::handle_claim_credential(ctx)
+    pub fn claim_credential(ctx: Context<ClaimCredential>, metadata_uri: String) -> Result<()> {
+        instructions::claim_credential::handle_claim_credential(ctx, metadata_uri)
     }
 
     pub fn fund_partner(ctx: Context<FundPartner>, amount: u64) -> Result<()> {
@@ -143,5 +148,17 @@ pub mod regtech {
 
     pub fn refund_partner(ctx: Context<RefundPartner>, amount: u64) -> Result<()> {
         instructions::refund_partner::handle_refund_partner(ctx, amount)
+    }
+
+    pub fn allocate_quizzes(ctx: Context<AllocateQuizzes>, count: u64) -> Result<()> {
+        instructions::allocate_quizzes::handle_allocate_quizzes(ctx, count)
+    }
+
+    pub fn refund_quizzes(
+        ctx: Context<RefundQuizzes>,
+        count: u64,
+        reason_code: u8,
+    ) -> Result<()> {
+        instructions::refund_quizzes::handle_refund_quizzes(ctx, count, reason_code)
     }
 }

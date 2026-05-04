@@ -139,7 +139,7 @@ fn fund_with_zero_amount_rejected() {
         ix_fund_partner(admin.pubkey(), partner_id, 0),
         &[&admin],
     );
-    expect_regtech_error(res, RegtechError::VaultInsufficient);
+    expect_regtech_error(res, RegtechError::InvalidAmount);
 }
 
 #[test]
@@ -156,7 +156,7 @@ fn refund_with_zero_amount_rejected() {
         ix_refund_partner(admin.pubkey(), partner_id, 0),
         &[&admin],
     );
-    expect_regtech_error(res, RegtechError::VaultInsufficient);
+    expect_regtech_error(res, RegtechError::InvalidAmount);
 }
 
 #[test]

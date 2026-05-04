@@ -44,4 +44,8 @@ pub enum RegtechError {
     AttemptNotPassed,
     #[msg("Partner vault has insufficient lamports")]
     VaultInsufficient,
+    #[msg("Partner has no remaining quiz quota")]
+    QuizQuotaExhausted,
+    #[msg("Amount is invalid for this operation")]
+    InvalidAmount,
 }

@@ -90,6 +90,9 @@ pub(crate) fn handle_register_partner(
     partner.cooldown_seconds = cooldown_seconds;
     partner.active = true;
     partner.created_at = clock.unix_timestamp;
+    partner.quizzes_purchased = 0;
+    partner.quizzes_consumed = 0;
+    partner.quizzes_refunded = 0;
     partner.bump = ctx.bumps.partner;
 
     emit!(PartnerRegistered {

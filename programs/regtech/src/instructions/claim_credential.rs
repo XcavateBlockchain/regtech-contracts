@@ -1,4 +1,5 @@
 use anchor_lang::prelude::*;
+use anchor_lang::solana_program::{program::invoke_signed, system_instruction};
 
 use crate::constants::{
     ATTEMPT_SEED, CONFIG_SEED, CREDENTIAL_SEED, ENROLLMENT_SEED, MODULE_SEED, PARTNER_SEED,
@@ -6,12 +7,8 @@ use crate::constants::{
 use crate::error::RegtechError;
 use crate::state::{Attempt, Config, Credential, Enrollment, Module, Partner};
 
-// Issuance op, so a global pause stops it. Same treatment as enroll_user.
-// Only the deactivation paths (revoke_credential when we get to it) should
-// keep working through a pause.
 #[derive(Accounts)]
 pub struct ClaimCredential<'info> {
-    #[account(mut)]
     pub partner_admin: Signer<'info>,
 
     #[account(
@@ -22,6 +19,7 @@ pub struct ClaimCredential<'info> {
     pub config: Account<'info, Config>,
 
     #[account(
+        mut,
         seeds = [PARTNER_SEED, &partner.partner_id],
         bump = partner.bump,
         has_one = partner_admin @ RegtechError::NotAuthorized,
@@ -68,10 +66,9 @@ pub struct ClaimCredential<'info> {
     )]
     pub attempt: Account<'info, Attempt>,
 
+    /// CHECK: Created via CPI in the handler. PDA seeds verified by Anchor.
     #[account(
-        init,
-        payer = partner_admin,
-        space = 8 + Credential::INIT_SPACE,
+        mut,
         seeds = [
             CREDENTIAL_SEED,
             enrollment.user.as_ref(),
@@ -80,18 +77,73 @@ pub struct ClaimCredential<'info> {
         ],
         bump,
     )]
-    pub credential: Account<'info, Credential>,
+    pub credential: UncheckedAccount<'info>,
 
     pub system_program: Program<'info, System>,
 }
 
-pub(crate) fn handle_claim_credential(ctx: Context<ClaimCredential>) -> Result<()> {
+pub(crate) fn handle_claim_credential(
+    ctx: Context<ClaimCredential>,
+    metadata_uri: String,
+) -> Result<()> {
+    require!(
+        metadata_uri.len() <= crate::constants::MAX_URI_LEN,
+        RegtechError::StringTooLong
+    );
+
     let now = Clock::get()?.unix_timestamp;
     let partner_id = ctx.accounts.partner.partner_id;
     let module = &ctx.accounts.module;
     let enrollment = &ctx.accounts.enrollment;
     let attempt = &ctx.accounts.attempt;
     let issued_by = ctx.accounts.partner_admin.key();
+    let credential_bump = ctx.bumps.credential;
+
+    let rent = Rent::get()?;
+    let space = 8 + Credential::INIT_SPACE;
+    let lamports = rent.minimum_balance(space);
+    let partner_own_rent = rent.minimum_balance(8 + Partner::INIT_SPACE);
+
+    let partner_info = ctx.accounts.partner.to_account_info();
+    let credential_info = ctx.accounts.credential.to_account_info();
+    let user_key = enrollment.user;
+    let deficit = lamports.saturating_sub(credential_info.lamports());
+
+    let vault_available = partner_info
+        .lamports()
+        .checked_sub(partner_own_rent)
+        .ok_or(error!(RegtechError::ArithmeticOverflow))?;
+    require!(vault_available >= deficit, RegtechError::VaultInsufficient);
+
+    let credential_seeds: &[&[u8]] = &[
+        CREDENTIAL_SEED,
+        user_key.as_ref(),
+        &partner_id,
+        &module.module_id_hash,
+        &[credential_bump],
+    ];
+
+    invoke_signed(
+        &system_instruction::allocate(&credential_info.key(), space as u64),
+        std::slice::from_ref(&credential_info),
+        &[credential_seeds],
+    )?;
+    invoke_signed(
+        &system_instruction::assign(&credential_info.key(), &crate::ID),
+        std::slice::from_ref(&credential_info),
+        &[credential_seeds],
+    )?;
+
+    if deficit > 0 {
+        **partner_info.try_borrow_mut_lamports()? = partner_info
+            .lamports()
+            .checked_sub(deficit)
+            .ok_or(error!(RegtechError::ArithmeticOverflow))?;
+        **credential_info.try_borrow_mut_lamports()? = credential_info
+            .lamports()
+            .checked_add(deficit)
+            .ok_or(error!(RegtechError::ArithmeticOverflow))?;
+    }
 
     // Snapshot the expiry from the module as it stands right now. If the
     // partner changes the module's expiry policy later, already-issued
@@ -104,26 +156,33 @@ pub(crate) fn handle_claim_credential(ctx: Context<ClaimCredential>) -> Result<(
         None => None,
     };
 
-    let credential = &mut ctx.accounts.credential;
-    credential.user = enrollment.user;
-    credential.partner_id = partner_id;
-    credential.module_id_hash = module.module_id_hash;
-    credential.score_bps = attempt.last_score_bps;
-    credential.issued_at = now;
-    credential.issued_by = issued_by;
-    credential.expires_at = expires_at;
-    credential.revoked_at = None;
-    credential.credential_asset = None;
-    credential.bump = ctx.bumps.credential;
+    let state = Credential {
+        user: enrollment.user,
+        partner_id,
+        module_id_hash: module.module_id_hash,
+        score_bps: attempt.last_score_bps,
+        issued_at: now,
+        issued_by,
+        expires_at,
+        revoked_at: None,
+        credential_asset: None,
+        metadata_uri,
+        bump: credential_bump,
+    };
+    let mut buf = Vec::with_capacity(space);
+    state.try_serialize(&mut buf)?;
+    let mut data = credential_info.try_borrow_mut_data()?;
+    data[..buf.len()].copy_from_slice(&buf);
+    drop(data);
 
     emit!(CredentialIssued {
         actor: issued_by,
-        user: credential.user,
+        user: state.user,
         partner_id,
-        module_id_hash: credential.module_id_hash,
-        score_bps: credential.score_bps,
-        issued_at: credential.issued_at,
-        expires_at: credential.expires_at,
+        module_id_hash: state.module_id_hash,
+        score_bps: state.score_bps,
+        issued_at: state.issued_at,
+        expires_at: state.expires_at,
     });
 
     Ok(())

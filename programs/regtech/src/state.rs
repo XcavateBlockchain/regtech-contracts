@@ -24,6 +24,12 @@ pub struct Partner {
     pub cooldown_seconds: i64,
     pub active: bool,
     pub created_at: i64,
+    // Three monotonic counters track the partner's quiz quota. Remaining =
+    // purchased - consumed - refunded. Monotonic so the historical record
+    // never gets rewritten, even on refunds.
+    pub quizzes_purchased: u64,
+    pub quizzes_consumed: u64,
+    pub quizzes_refunded: u64,
     pub bump: u8,
 }
 
@@ -88,5 +94,7 @@ pub struct Credential {
     // Filled in when the off-chain mpl-core Asset mint gets linked back.
     // Option so claim_credential can land before that ix exists.
     pub credential_asset: Option<Pubkey>,
+    #[max_len(256)]
+    pub metadata_uri: String,
     pub bump: u8,
 }
